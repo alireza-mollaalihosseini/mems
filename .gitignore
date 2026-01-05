@@ -1,0 +1,6 @@
+*.txt
+*.db
+*.out
+*.err
+*.npy
+*.npz

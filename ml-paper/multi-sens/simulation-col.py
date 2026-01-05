@@ -1,0 +1,342 @@
+import os
+import sys
+import numpy as np
+import soundfile as sf
+from scipy.signal import butter, lfilter
+from numba import njit
+from joblib import Parallel, delayed
+from sklearn.model_selection import KFold
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+from scipy.stats import skew, kurtosis
+
+
+@njit(fastmath=True)
+def rk4_step_inplace(y, h, c1, c2, c3, c4, phi_dc, a, k1, k2, k3, k4, y_temp):
+    # k1
+    exsi, etta, psy, phi_ac = y
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k1[0] = etta
+    k1[1] = -c2 * etta - exsi + psy
+    k1[2] = -c1 * psy + c1 * min_term
+    k1[3] = -c3 * phi_ac + c4 * etta
+
+    # k2
+    for i in range(4):
+        y_temp[i] = y[i] + 0.5 * h * k1[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k2[0] = etta
+    k2[1] = -c2 * etta - exsi + psy
+    k2[2] = -c1 * psy + c1 * min_term
+    k2[3] = -c3 * phi_ac + c4 * etta
+
+    # k3
+    for i in range(4):
+        y_temp[i] = y[i] + 0.5 * h * k2[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k3[0] = etta
+    k3[1] = -c2 * etta - exsi + psy
+    k3[2] = -c1 * psy + c1 * min_term
+    k3[3] = -c3 * phi_ac + c4 * etta
+
+    # k4
+    for i in range(4):
+        y_temp[i] = y[i] + h * k3[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k4[0] = etta
+    k4[1] = -c2 * etta - exsi + psy
+    k4[2] = -c1 * psy + c1 * min_term
+    k4[3] = -c3 * phi_ac + c4 * etta
+
+    # update y
+    for i in range(4):
+        y[i] += (h / 6.0) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i])
+
+
+@njit(fastmath=True)
+def rk4_step_inplace_with_force(y, h, c1, c2, c3, c4, c5, phi_dc, a, k1, k2, k3, k4, y_temp, f_x):
+    # k1
+    exsi, etta, psy, phi_ac = y
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k1[0] = etta
+    k1[1] = -c2 * etta - exsi + psy + c5 * f_x
+    k1[2] = -c1 * psy + c1 * min_term
+    k1[3] = -c3 * phi_ac + c4 * etta
+
+    # k2
+    for i in range(4):
+        y_temp[i] = y[i] + 0.5 * h * k1[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k2[0] = etta
+    k2[1] = -c2 * etta - exsi + psy + c5 * f_x
+    k2[2] = -c1 * psy + c1 * min_term
+    k2[3] = -c3 * phi_ac + c4 * etta
+
+    # k3
+    for i in range(4):
+        y_temp[i] = y[i] + 0.5 * h * k2[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k3[0] = etta
+    k3[1] = -c2 * etta - exsi + psy + c5 * f_x
+    k3[2] = -c1 * psy + c1 * min_term
+    k3[3] = -c3 * phi_ac + c4 * etta
+
+    # k4
+    for i in range(4):
+        y_temp[i] = y[i] + h * k3[i]
+    exsi, etta, psy, phi_ac = y_temp
+    temp = a * phi_ac + phi_dc
+    min_term = min(temp * temp, 1.0)
+    k4[0] = etta
+    k4[1] = -c2 * etta - exsi + psy + c5 * f_x
+    k4[2] = -c1 * psy + c1 * min_term
+    k4[3] = -c3 * phi_ac + c4 * etta
+
+    # update y
+    for i in range(4):
+        y[i] += (h / 6.0) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i])
+
+
+@njit(fastmath=True)
+def simulate_transient(N, h, c1, c2, c3, c4, phi_dc, a):
+
+  y  = np.zeros(4)
+  y[0] = 1e-9
+  k1 = np.zeros(4)
+  k2 = np.zeros(4)
+  k3 = np.zeros(4)
+  k4 = np.zeros(4)
+  y_temp = np.zeros(4)
+
+  for k in range(N):
+    rk4_step_inplace(y, h, c1, c2, c3, c4, phi_dc, a, k1, k2, k3, k4, y_temp)
+
+  return y
+
+
+@njit(fastmath=True)
+def simulate_with_force(y, N, h, c1, c2, c3, c4, c5, phi_dc, a, f_ext):
+
+  k1 = np.zeros(4)
+  k2 = np.zeros(4)
+  k3 = np.zeros(4)
+  k4 = np.zeros(4)
+  y_temp = np.zeros(4)
+  buf_u_ac = np.empty(N)
+
+  for k in range(N):
+    f_x = f_ext[k]
+    rk4_step_inplace_with_force(y, h, c1, c2, c3, c4, c5, phi_dc, a, k1, k2, k3, k4, y_temp, f_x)
+    buf_u_ac[k] = y[3]
+
+  return buf_u_ac
+
+
+def ridge_closed_form(X_train, Y_train, lam):
+    n_features = X_train.shape[1]
+    I = np.eye(n_features, dtype=X_train.dtype)
+    A = X_train.T @ X_train + lam * I
+    b = X_train.T @ Y_train
+    try:
+        return np.linalg.solve(A, b)
+    except np.linalg.LinAlgError:
+        return np.linalg.pinv(A) @ b
+
+
+def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
+    # Add bias term
+    X_train_b = np.hstack((X_train, np.ones((X_train.shape[0], 1), dtype=X_train.dtype)))
+    X_eval_b  = np.hstack((X_eval,  np.ones((X_eval.shape[0], 1), dtype=X_eval.dtype)))
+
+    # Train ridge regression
+    W = ridge_closed_form(X_train_b, Y_train, lam)
+
+    # Handle 1D vs 2D labels
+    y_train_true = Y_train if Y_train.ndim == 1 else np.argmax(Y_train, axis=1)
+    y_eval_true  = Y_eval  if Y_eval.ndim == 1  else np.argmax(Y_eval, axis=1)
+
+    # Predictions
+    y_train_pred = X_train_b @ W
+    y_train_hats = np.argmax(y_train_pred, axis=1)
+    train_accuracy = np.mean(y_train_hats == y_train_true)
+
+    y_eval_pred = X_eval_b @ W
+    y_eval_hats = np.argmax(y_eval_pred, axis=1)
+
+    accuracy  = accuracy_score(y_eval_true, y_eval_hats)
+    precision = precision_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    recall    = recall_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    f1        = f1_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    
+    results = np.array([lam, train_accuracy, accuracy, precision, recall, f1], dtype=np.float64)
+    
+    return results
+
+
+
+def process_sensor(f, fname):
+    # Simulation params
+    alpha, Q_0, tau, beta, gamma, R, kappa = 19.2, 50.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
+    omega_0 = 2 * np.pi * f
+
+    u_max = 1.0
+    h = 1e-6 * omega_0
+    T = 50.0 * omega_0
+
+    # Derived constants
+    N_trans = int(T / h)
+    N_force = int((1.0 * omega_0) / h)
+    l_0          = (alpha * gamma * u_max**2) / (beta * R**2 * omega_0**2)
+    c1           = beta / omega_0
+    c2           = 1/ Q_0
+    c3           = 1 / (tau * omega_0)
+    c4           = (kappa * l_0) / (u_max)
+    c5           = mu / (l_0 * omega_0**2)
+    phi_dc       = u_dc / u_max
+
+    # Initial transient
+    y_final = simulate_transient(N_trans, h, c1, c2, c3, c4, phi_dc, a)
+
+    # Process the file
+    data, sr = sf.read(fname)
+    new_sr = int(1e6)
+    frac = new_sr / sr
+    idxs = (np.arange(int(len(data)*frac)) / frac).astype(np.int64)
+    signal = data[idxs]
+
+    signal_buf = np.zeros(N_force, dtype=np.float64)
+    signal_buf[:len(signal)] = signal
+
+    y0 = y_final.copy()
+    u_ac_buf = simulate_with_force(y0, N_force, h, c1, c2, c3, c4, c5, phi_dc, a, signal_buf)
+
+    du  = np.diff(u_ac_buf)
+    d2u = np.diff(u_ac_buf, n=2)
+
+    feats = [
+        np.mean(u_ac_buf),
+        np.std(u_ac_buf),
+        np.mean(du),
+        np.std(du),
+        np.mean(d2u),
+        np.std(d2u),
+
+        np.max(u_ac_buf),
+        np.argmax(u_ac_buf),
+        np.max(du),
+        np.argmax(du),
+        np.max(d2u),
+        np.argmax(d2u),
+
+        np.sqrt(np.mean(u_ac_buf**2)),  # RMS
+        np.ptp(u_ac_buf),
+        skew(u_ac_buf),
+        kurtosis(u_ac_buf)
+    ]
+
+    return np.array(feats)
+
+
+def build_state_matrix(train_file_list_path, val_file_list_path, a, u_dc, mu, f_values):
+    # Load filenames
+    train_filenames = np.loadtxt(train_file_list_path, dtype=str)
+    val_filenames = np.loadtxt(val_file_list_path, dtype=str)
+
+    n_train = len(train_filenames)
+    n_val   = len(val_filenames)
+
+    # Combine for single parallel processing
+    filenames = np.concatenate([train_filenames, val_filenames])
+    n_files = len(filenames)
+
+    # state_matrix.shape = (n_files, 201 × n_stats)
+    state_matrix = np.zeros((n_files, len(f_values) * 16))
+
+    for i, f in enumerate(f_values):
+
+        results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
+            delayed(process_sensor)(f, fname)
+            for fname in filenames
+        )
+
+        col = np.vstack(results)
+        state_matrix[:, i*16:(i+1)*16] = col
+
+    train_state = state_matrix[:n_train]
+    val_state   = state_matrix[n_train:]
+
+    return train_state, val_state
+
+
+
+# import argparse
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--f', type=float, required=True, help='Value of f to process')
+# args = parser.parse_args()
+
+if __name__ == '__main__':
+
+    # a = 0.44
+    a = 0.6
+    mu = 1.0 
+    u_dc = 0.4
+    # f = args.f
+    lambda_values = np.array([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6])
+    # f_values = np.array([8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000, 16000])
+    f_values = np.linspace(8000, 30000, 201)
+
+    # Paths
+    train_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
+    val_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
+
+    # labels
+    labels_train = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
+    labels_val   = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
+
+    # Results dir
+    results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/results"
+    os.makedirs(results_dir, exist_ok=True)
+
+    train_state, val_state = build_state_matrix(train_files, val_files, a, u_dc, mu, f_values)
+
+    # scale PER FOLD (no leakage)
+    scaler = StandardScaler()
+    X_train_std = scaler.fit_transform(train_state)
+    X_val_std   = scaler.transform(val_state)
+
+    # evaluate all lambdas (parallel)
+    outputs = Parallel(
+        n_jobs=64,
+        verbose=1,
+        backend="multiprocessing"
+    )(
+        delayed(ridge_regression_fast)(
+            X_train_std, labels_train,
+            X_val_std,  labels_val,
+            lam
+        )
+        for lam in lambda_values
+    )
+
+    outputs_arr = np.vstack(outputs)
+
+    # Save raw metrics
+    np.savetxt(
+        f"{results_dir}/results-a-{a:.2f}-u_dc-{u_dc:.2f}-mu-{mu:.2e}.txt",
+        outputs_arr,
+        fmt="%.6f",
+        header="lambda,train_acc,val_acc,precision,recall,f1",
+        comments=""
+    )

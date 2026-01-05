@@ -1,0 +1,5 @@
+dropout: 0.33804960883815643
+fc_dim: 256
+kernel_size: 7
+lr: 0.0003917706693426163
+num_filters: 32
