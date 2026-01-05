@@ -6,7 +6,8 @@
 
 
 # f grid = linspace(8000, 30000, 201)
-f_values=($(seq 1000 50 50000))
+# f_values=($(seq 1000 50 50000))
+f_values=($(seq 1000 490 50000))
 # f_values=($(seq 8000 110 30000))
 # f_values=($(seq 8000 1000 12000))
 
@@ -22,8 +23,8 @@ mkdir -p "${results_dir}/err-out"
 # ----------------------------------
 # Submission control
 # ----------------------------------
-max_concurrent_jobs=15
-sleep_interval=300
+max_concurrent_jobs=10
+sleep_interval=60
 
 failed_log="${results_dir}/err-out/failed_jobs.log"
 

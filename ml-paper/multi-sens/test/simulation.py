@@ -197,7 +197,7 @@ def build_state_matrix(train_file_list_path, val_file_list_path, results_dir, a,
     n_files = len(filenames)
 
     # Simulation params
-    alpha, omega_0, Q_0, tau, beta, gamma, R, kappa = 19.2, f*2*np.pi, 500.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
+    alpha, omega_0, Q_0, tau, beta, gamma, R, kappa = 19.2, f*2*np.pi, 50.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
     u_max = 1.0
     h = 1e-6 * omega_0
     T = 50.0 * omega_0

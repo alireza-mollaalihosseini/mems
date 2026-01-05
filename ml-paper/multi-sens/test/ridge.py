@@ -4,6 +4,10 @@ import numpy as np
 from joblib import Parallel, delayed
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from pathlib import Path
+import shutil
+plt.style.use('ggplot')
 
 
 def ridge_closed_form(X_train, Y_train, lam):
@@ -59,7 +63,7 @@ if __name__ == '__main__':
                      1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18])
     # f_values = np.array([8000, 9000, 10000, 11000, 12000])
     # f_values = np.linspace(8000, 30000, 201)
-    f_values = np.arange(1000, 50000, 50)
+    f_values = np.linspace(1000, 50000, 101)
 
     state_matrix = np.zeros((10510, len(f_values) * 16))
     
@@ -95,6 +99,67 @@ if __name__ == '__main__':
 
     outputs_arr = np.vstack(outputs)
 
+    # plot the results
+    lambdas   = outputs_arr[:, 0]
+    train_acc = outputs_arr[:, 1] * 100
+    test_acc  = outputs_arr[:, 2] * 100
+
+    idx_best = np.argmax(test_acc)
+
+    best_test   = test_acc[idx_best]
+    best_train  = train_acc[idx_best]
+    best_lambda = lambdas[idx_best]
+
+    # std across λ (for uncertainty band)
+    std_test = np.std(test_acc)
+    std_train = np.std(train_acc)
+
+    # -----------------------------
+    # Plot with error bars
+    # -----------------------------
+    plt.figure(figsize=(16, 8))
+
+    plt.plot(
+        lambda_values, test_acc,
+        marker='o',
+        linewidth=3,
+        label="Validation Accuracy"
+    )
+
+    plt.plot(
+        lambda_values, train_acc,
+        marker='s',
+        linewidth=3,
+        linestyle='--',
+        label="Training Accuracy"
+    )
+
+    # highlight best lambda
+    plt.scatter(
+        best_lambda,
+        best_test,
+        s=200,
+        marker='*',
+        zorder=5,
+        label=(
+            f"Best val = {best_test:.2f}%\n"
+            f"λ = {best_lambda:.1e}"
+        )
+    )
+
+    # Formatting
+    plt.xscale('log')
+    plt.xlabel("Ridge $\\lambda$", fontweight='bold', fontsize=20)
+    plt.ylabel("Accuracy (%)", fontweight='bold', fontsize=20)
+    plt.xticks(fontweight='bold', fontsize=20)
+    plt.yticks(fontweight='bold', fontsize=20)
+    plt.legend(fontsize=18)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.8)
+    plt.tight_layout()
+
+    plt.savefig(f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/plots/lambda-optimization-a-{a:.2f}-u_dc-{u_dc:.2f}.png", dpi=300)
+    plt.close()
+
     # Results dir
     results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/accuracy"
     os.makedirs(results_dir, exist_ok=True)
@@ -107,3 +172,14 @@ if __name__ == '__main__':
         header="lambda,train_acc,val_acc,precision,recall,f1",
         comments=""
     )
+
+    # delete cols
+    for i, f in enumerate(f_values):
+        os.remove(f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/f-{int(f)}.npz")
+
+    err_out_dir = Path(
+        f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/err-out"
+    )
+
+    if err_out_dir.exists():
+        shutil.rmtree(err_out_dir)
