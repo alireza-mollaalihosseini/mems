@@ -1,0 +1,5 @@
+This folder is correspond to investigating the performance of wavelet packets tree as a feature extraction method. here in the test.py, a simple example of how to caöculate the wavelets are presented. then in both audio and sensor classification folders, the raw and with sensor simulation are compared with having exactly same parameters and features.
+
+based on the results, the raw data performs better with this method of feature extraction, reaching to accuracy=75%. on the other hand, the simulated sensor data reaches the accuracy of 51%.
+
+But another interesting result from this, was that in the lambda optimization, the overfitting phenomena were not detected. whereas, previously with fft method, the overfitting was happend in most cases with having a gap around 10-20% between training and testing (in 10-fold-cross-validation).
