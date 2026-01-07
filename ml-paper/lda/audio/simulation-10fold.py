@@ -130,7 +130,7 @@ def build_state_matrices(train_file_list_path, val_file_list_path, test_file_lis
     all_filenames = np.concatenate([train_filenames, val_filenames, test_filenames])
     
     # Single parallel call to process all files (reduces joblib overhead)
-    results = Parallel(n_jobs=64, verbose=1, backend='threading')(
+    results = Parallel(n_jobs=64, verbose=1, backend='multiprocessing')(
         delayed(process_file)(fname)
         for fname in all_filenames
     )
@@ -194,16 +194,11 @@ if __name__ == "__main__":
         # evaluate all lambdas (parallel)
         fold_outputs = lda_classification_fast(X_train_std, y_train, X_test_std, y_test)
 
-        # -----------------------------
-        # Save per-fold results
-        # -----------------------------
-        for i, (metrics) in enumerate(fold_outputs):
-
-            # Save raw metrics
-            np.savetxt(
-                f"{results_dir}/fold_results-fold-{fold}.txt",
-                metrics.reshape(1,-1),
-                fmt="%.6f"
-            )
+        # Save raw metrics
+        np.savetxt(
+            f"{results_dir}/fold_results-fold-{fold}.txt",
+            fold_outputs.reshape(1,-1),
+            fmt="%.6f"
+        )
 
     print("\n✅ K-Fold cross-validation finished successfully.")

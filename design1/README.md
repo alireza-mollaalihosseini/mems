@@ -1,0 +1,1 @@
+this folder is suppose to recreate the state matrix and gini index and scores for similating sensor design 1 that were used in the previous poster in DAGA. I need these plots to update the poster for the PHD poster session in ilmenau on January 14, 2026.

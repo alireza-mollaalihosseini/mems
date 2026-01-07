@@ -6,7 +6,7 @@ plt.style.use("ggplot")
 # Configuration
 # -----------------------------
 n_folds = 10
-results_dir = "/scratch/almo2783/scratch/ml-paper/lda/audio/results"
+results_dir = "/scratch/almo2783/scratch/ml-paper/lda/sensor/results"
 
 # -----------------------------
 # Load fold data per lambda
