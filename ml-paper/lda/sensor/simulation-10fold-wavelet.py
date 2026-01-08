@@ -283,6 +283,9 @@ def lda_classification_fast(X_train, Y_train, X_eval, Y_eval):
     lda = LinearDiscriminantAnalysis(
         solver="svd"   # best default for high-dimensional features
     )
+    # lda = LinearDiscriminantAnalysis(
+    #     solver="lsqr", shrinkage="auto"   # best default for high-dimensional features
+    # ) # worser than svd
 
     lda.fit(X_train, y_train_true)
 
@@ -307,14 +310,14 @@ def lda_classification_fast(X_train, Y_train, X_eval, Y_eval):
     return results
 
 
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('--a', type=float, required=True, help='Value of a to process')
-args = parser.parse_args()
+# import argparse
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--a', type=float, required=True, help='Value of a to process')
+# args = parser.parse_args()
 
 if __name__ == '__main__':
 
-    a = args.a
+    a = 0.44
     u_dc = 0.5
     mu = 1.0
     a_values = np.linspace(-1, 1, 101)

@@ -25,6 +25,9 @@ def lda_classification_fast(X_train, Y_train, X_eval, Y_eval):
     lda = LinearDiscriminantAnalysis(
         solver="svd"   # best default for high-dimensional features
     )
+    # lda = LinearDiscriminantAnalysis(
+    #     solver="lsqr", shrinkage="auto"   # best default for high-dimensional features
+    # ) # worser than svd
 
     lda.fit(X_train, y_train_true)
 
@@ -49,74 +52,11 @@ def lda_classification_fast(X_train, Y_train, X_eval, Y_eval):
     return results
 
 
-def process_file(fname, wavelet="db4", maxlevel=5, mode="symmetric"):
+def process_file(fname):
     data, _ = sf.read(fname)
-    data = data.astype(np.float32)
-    if data.ndim > 1:
-        data = np.mean(data, axis=1)
-    data -= np.mean(data)
-    data /= (np.max(np.abs(data)) + 1e-12)
-
-    wp = pywt.WaveletPacket(data=data, wavelet=wavelet, mode=mode, maxlevel=maxlevel)
-    nodes = wp.get_level(maxlevel, order="freq")
-
-    features = []
-    total_energy = 0.0
-    energies = []
-    
-    # -------------------------
-    # First pass: energies
-    # -------------------------
-    for node in nodes:
-        c = node.data
-        e = np.sum(c**2)
-        energies.append(e)
-        total_energy += e
-
-    energies = np.array(energies) + 1e-16
-
-    # -------------------------
-    # Second pass: rich features
-    # -------------------------
-    for i, node in enumerate(nodes):
-        c = node.data
-        abs_c = np.abs(c)
-
-        # Energy features
-        log_energy = np.log10(energies[i])
-        rel_energy = energies[i] / total_energy
-        rms = np.sqrt(np.mean(c**2))
-
-        # Distribution
-        mean_abs = np.mean(abs_c)
-        std = np.std(c)
-        skewness = skew(c)
-        kurt = kurtosis(c)
-
-        # Sparsity / entropy
-        p = abs_c / (np.sum(abs_c) + 1e-16)
-        shannon_entropy = -np.sum(p * np.log2(p + 1e-16))
-        l1_l2 = np.sum(abs_c) / (np.sqrt(np.sum(c**2)) + 1e-16)
-
-        # Temporal structure
-        zcr = np.mean(np.diff(np.sign(c)) != 0)
-        crest = np.max(abs_c) / (rms + 1e-16)
-
-        features.extend([
-            log_energy,
-            rel_energy,
-            rms,
-            mean_abs,
-            std,
-            skewness,
-            kurt,
-            shannon_entropy,
-            l1_l2,
-            zcr,
-            crest
-        ])
-
-    return np.array(features, dtype=np.float32)
+    fft_vals = np.fft.rfft(data)
+    # return np.abs(fft_vals).astype(np.float32)
+    return np.log10(np.abs(fft_vals)+1e-16).astype(np.float32)
 
 
 
@@ -196,7 +136,7 @@ if __name__ == "__main__":
 
         # Save raw metrics
         np.savetxt(
-            f"{results_dir}/fold_results-fold-{fold}.txt",
+            f"{results_dir}/fold_results-fold-{fold}-fft.txt",
             fold_outputs.reshape(1,-1),
             fmt="%.6f"
         )

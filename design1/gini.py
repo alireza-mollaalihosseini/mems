@@ -57,10 +57,10 @@ print("Confusion matrix:")
 
 # Extract feature importances
 rf_scores = rf.feature_importances_
-ranked_idx = np.argsort(importances)[::-1]  # descending
+ranked_idx = np.argsort(rf_scores)[::-1]  # descending
 
 # Save model and preprocessing
-dump(rf_clf, "rf_classifier.joblib")
+dump(rf, "rf_classifier.joblib")
 dump(scaler, "scaler.joblib")
 
 # Save feature ranking (already done, but grouped for clarity)
