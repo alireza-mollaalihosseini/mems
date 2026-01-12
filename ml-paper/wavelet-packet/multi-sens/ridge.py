@@ -1,0 +1,190 @@
+import os
+import sys
+import numpy as np
+from joblib import Parallel, delayed
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from pathlib import Path
+import shutil
+plt.style.use('ggplot')
+
+
+def ridge_closed_form(X_train, Y_train, lam):
+    n_features = X_train.shape[1]
+    I = np.eye(n_features, dtype=X_train.dtype)
+    A = X_train.T @ X_train + lam * I
+    b = X_train.T @ Y_train
+    try:
+        return np.linalg.solve(A, b)
+    except np.linalg.LinAlgError:
+        return np.linalg.pinv(A) @ b
+
+
+def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
+    # Add bias term
+    X_train_b = np.hstack((X_train, np.ones((X_train.shape[0], 1), dtype=X_train.dtype)))
+    X_eval_b  = np.hstack((X_eval,  np.ones((X_eval.shape[0], 1), dtype=X_eval.dtype)))
+
+    # Train ridge regression
+    W = ridge_closed_form(X_train_b, Y_train, lam)
+
+    # Handle 1D vs 2D labels
+    y_train_true = Y_train if Y_train.ndim == 1 else np.argmax(Y_train, axis=1)
+    y_eval_true  = Y_eval  if Y_eval.ndim == 1  else np.argmax(Y_eval, axis=1)
+
+    # Predictions
+    y_train_pred = X_train_b @ W
+    y_train_hats = np.argmax(y_train_pred, axis=1)
+    train_accuracy = np.mean(y_train_hats == y_train_true)
+
+    y_eval_pred = X_eval_b @ W
+    y_eval_hats = np.argmax(y_eval_pred, axis=1)
+
+    accuracy  = accuracy_score(y_eval_true, y_eval_hats)
+    precision = precision_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    recall    = recall_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    f1        = f1_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
+    
+    results = np.array([lam, train_accuracy, accuracy, precision, recall, f1], dtype=np.float64)
+    
+    return results
+
+# import argparse
+# parser = argparse.ArgumentParser()
+
+# parser.add_argument('--a', type=float, required=True, help='Value of a to process')
+# parser.add_argument('--u_dc', type=float, required=True, help='Value of u_dc to process')
+# args = parser.parse_args()
+
+if __name__ == '__main__':
+
+    # a = args.a
+    a = 0.9
+    mu = 1.0 
+    # u_dc = args.u_dc
+    u_dc = 1.0
+
+    lambda_values = np.array([1e-18, 1e-17, 1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10,
+                     1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18])
+    
+    f_values = np.linspace(1000, 50000, 36)
+
+    state_matrix = np.zeros((10510, len(f_values) * 368))
+    
+    for i, f in enumerate(f_values):
+        cols = np.load(f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/results/a-{a:.2f}-u_dc-{u_dc:.2f}/f-{int(f)}.npz")["arr_0"]
+        state_matrix[:, i*368:(i+1)*368] = cols
+
+    # labels
+    labels_train = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
+    labels_val   = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
+
+    train_state = state_matrix[:len(labels_train)]
+    val_state   = state_matrix[len(labels_train):]
+
+    # scale PER FOLD (no leakage)
+    scaler = StandardScaler()
+    X_train_std = scaler.fit_transform(train_state)
+    X_val_std   = scaler.transform(val_state)
+
+    # evaluate all lambdas (parallel)
+    outputs = Parallel(
+        n_jobs=64,
+        verbose=1,
+        backend="multiprocessing"
+    )(
+        delayed(ridge_regression_fast)(
+            X_train_std, labels_train,
+            X_val_std,  labels_val,
+            lam
+        )
+        for lam in lambda_values
+    )
+
+    outputs_arr = np.vstack(outputs)
+
+    # plot the results
+    lambdas   = outputs_arr[:, 0]
+    train_acc = outputs_arr[:, 1] * 100
+    test_acc  = outputs_arr[:, 2] * 100
+
+    idx_best = np.argmax(test_acc)
+
+    best_test   = test_acc[idx_best]
+    best_train  = train_acc[idx_best]
+    best_lambda = lambdas[idx_best]
+
+    # std across λ (for uncertainty band)
+    std_test = np.std(test_acc)
+    std_train = np.std(train_acc)
+
+    # -----------------------------
+    # Plot with error bars
+    # -----------------------------
+    plt.figure(figsize=(16, 8))
+
+    plt.plot(
+        lambda_values, test_acc,
+        marker='o',
+        linewidth=3,
+        label="Validation Accuracy"
+    )
+
+    plt.plot(
+        lambda_values, train_acc,
+        marker='s',
+        linewidth=3,
+        linestyle='--',
+        label="Training Accuracy"
+    )
+
+    # highlight best lambda
+    plt.scatter(
+        best_lambda,
+        best_test,
+        s=200,
+        marker='*',
+        zorder=5,
+        label=(
+            f"Best val = {best_test:.2f}%\n"
+            f"λ = {best_lambda:.1e}"
+        )
+    )
+
+    # Formatting
+    plt.xscale('log')
+    plt.xlabel("Ridge $\\lambda$", fontweight='bold', fontsize=20)
+    plt.ylabel("Accuracy (%)", fontweight='bold', fontsize=20)
+    plt.xticks(fontweight='bold', fontsize=20)
+    plt.yticks(fontweight='bold', fontsize=20)
+    plt.legend(fontsize=18)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.8)
+    plt.tight_layout()
+
+    plt.savefig(f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/lambda-optimization-a-{a:.2f}-u_dc-{u_dc:.2f}.png", dpi=300)
+    plt.close()
+
+    # Results dir
+    results_dir = f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/accuracy"
+    os.makedirs(results_dir, exist_ok=True)
+
+    # Save raw metrics
+    np.savetxt(
+        f"{results_dir}/results-a-{a:.2f}-u_dc-{u_dc:.2f}-mu-{mu:.2e}.txt",
+        outputs_arr,
+        fmt=["%.0e", "%.6f", "%.6f", "%.6f", "%.6f", "%.6f"],
+        header="lambda,train_acc,val_acc,precision,recall,f1",
+        comments=""
+    )
+
+    # delete cols
+    for i, f in enumerate(f_values):
+        os.remove(f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/results/a-{a:.2f}-u_dc-{u_dc:.2f}/f-{int(f)}.npz")
+
+    err_out_dir = Path(
+        f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/results/a-{a:.2f}-u_dc-{u_dc:.2f}/err-out"
+    )
+
+    if err_out_dir.exists():
+        shutil.rmtree(err_out_dir)

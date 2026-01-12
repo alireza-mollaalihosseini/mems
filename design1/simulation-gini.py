@@ -61,7 +61,7 @@ def process_top_k(top_k, ranked_idx, X_train, X_val, labels_train, labels_val, l
 
     results = ridge_regression_fast(
         X_train_selected, labels_train, X_val_selected, labels_val, 
-        lambda_value, a_value, u_dc_value
+        lambda_value
     )
 
     # Save results
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     mu = 1.0
 
     # Load training, validation
-    X_train = np.load(f"/scratch/almo2783/scratch/design1/state-matrices/train_state_a_0.44_u_dc_0.4.npz")['arr_0']
-    X_val   = np.load(f"/scratch/almo2783/scratch/design1/state-matrices/val_state_a_0.44_u_dc_0.4.npz")['arr_0']
+    X_train = np.load(f"/scratch/almo2783/scratch/design1/state-matrices/train_state_a_0.60_u_dc_0.10.npz")['arr_0']
+    X_val   = np.load(f"/scratch/almo2783/scratch/design1/state-matrices/val_state_a_0.60_u_dc_0.10.npz")['arr_0']
     labels_train = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 

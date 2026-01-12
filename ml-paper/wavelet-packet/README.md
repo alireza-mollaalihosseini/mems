@@ -3,3 +3,5 @@ This folder is correspond to investigating the performance of wavelet packets tr
 based on the results, the raw data performs better with this method of feature extraction, reaching to accuracy=75%. on the other hand, the simulated sensor data reaches the accuracy of 51%.
 
 But another interesting result from this, was that in the lambda optimization, the overfitting phenomena were not detected. whereas, previously with fft method, the overfitting was happend in most cases with having a gap around 10-20% between training and testing (in 10-fold-cross-validation).
+
+there is also another comparison in this folder with multi sensor using wavelet (and also timeseries features) with ridge regression which give a good results (84, 97 for test and train).
