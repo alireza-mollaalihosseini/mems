@@ -10,6 +10,12 @@ import shutil
 plt.style.use('ggplot')
 
 
+def softmax(logits):
+    """Numerically stable softmax."""
+    logits = logits - np.max(logits, axis=1, keepdims=True)
+    exp = np.exp(logits)
+    return exp / np.sum(exp, axis=1, keepdims=True)
+
 def ridge_closed_form(X_train, Y_train, lam):
     n_features = X_train.shape[1]
     I = np.eye(n_features, dtype=X_train.dtype)
@@ -20,49 +26,82 @@ def ridge_closed_form(X_train, Y_train, lam):
     except np.linalg.LinAlgError:
         return np.linalg.pinv(A) @ b
 
-
-def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
+def ridge_regression_fast(
+    X_train, Y_train, X_eval, Y_eval, lam,
+    bootstrap_iters=5, beta=0.95
+):
+    """
+    Modified Ridge regression with optional iterative soft bootstrapping.
+    
+    - If bootstrap_iters=0 → original hard-label behavior.
+    - If bootstrap_iters>0 → "smart" soft-label bootstrapping:
+        Iteratively mix the model's confident predictions on the training data
+        back into the targets. This encourages consistency and robustness to
+        noisy samples (e.g., audio recordings corrupted by noise that make
+        features unreliable/outliers).
+        
+        Noisy samples tend to get low-confidence predictions → their targets
+        are gradually softened toward the model's consistent view, effectively
+        down-weighting them. This acts as a form of self-distillation / robust
+        regularization without needing extra data or complex losses.
+    """
     # Add bias term
     X_train_b = np.hstack((X_train, np.ones((X_train.shape[0], 1), dtype=X_train.dtype)))
     X_eval_b  = np.hstack((X_eval,  np.ones((X_eval.shape[0], 1), dtype=X_eval.dtype)))
 
-    # Train ridge regression
-    W = ridge_closed_form(X_train_b, Y_train, lam)
+    # Assume Y_train/Y_eval are one-hot (N x C) as in your loading code
+    Y_train_oh = Y_train.astype(np.float64)
+    y_train_true = np.argmax(Y_train_oh, axis=1)
+    y_eval_true  = np.argmax(Y_eval, axis=1)
 
-    # Handle 1D vs 2D labels
-    y_train_true = Y_train if Y_train.ndim == 1 else np.argmax(Y_train, axis=1)
-    y_eval_true  = Y_eval  if Y_eval.ndim == 1  else np.argmax(Y_eval, axis=1)
+    # -----------------------------
+    # Bootstrapping loop (smart soft labels)
+    # -----------------------------
+    current_targets = Y_train_oh.copy()
 
-    # Predictions
-    y_train_pred = X_train_b @ W
-    y_train_hats = np.argmax(y_train_pred, axis=1)
+    for it in range(bootstrap_iters):
+        # Fit on current (soft) targets
+        W = ridge_closed_form(X_train_b, current_targets, lam)
+
+        # Get soft predictions on training data
+        logits_train = X_train_b @ W
+        proba_train = softmax(logits_train)
+
+        # Update targets: convex combination (beta trusts original labels)
+        current_targets = beta * Y_train_oh + (1.0 - beta) * proba_train
+
+    # Final fit on the refined soft targets
+    W = ridge_closed_form(X_train_b, current_targets, lam)
+
+    # -----------------------------
+    # Predictions (using final model)
+    # -----------------------------
+    logits_train = X_train_b @ W
+    y_train_hats = np.argmax(logits_train, axis=1)
     train_accuracy = np.mean(y_train_hats == y_train_true)
 
-    y_eval_pred = X_eval_b @ W
-    y_eval_hats = np.argmax(y_eval_pred, axis=1)
+    logits_eval = X_eval_b @ W
+    y_eval_hats = np.argmax(logits_eval, axis=1)
 
     accuracy  = accuracy_score(y_eval_true, y_eval_hats)
     precision = precision_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
     recall    = recall_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
     f1        = f1_score(y_eval_true, y_eval_hats, average='macro', zero_division=0)
     
-    results = np.array([lam, train_accuracy, accuracy, precision, recall, f1], dtype=np.float64)
+    # Include lambda (and optionally bootstrap params) for easy analysis
+    results = np.array([
+        lam, bootstrap_iters, beta,
+        train_accuracy, accuracy, precision, recall, f1
+    ], dtype=np.float64)
     
     return results
 
-# import argparse
-# parser = argparse.ArgumentParser()
 
-# parser.add_argument('--a', type=float, required=True, help='Value of a to process')
-# parser.add_argument('--u_dc', type=float, required=True, help='Value of u_dc to process')
-# args = parser.parse_args()
 
 if __name__ == '__main__':
 
-    # a = args.a
     a = 0.9
     mu = 1.0 
-    # u_dc = args.u_dc
     u_dc = 1.0
 
     lambda_values = np.array([1e-18, 1e-17, 1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10,
@@ -88,6 +127,12 @@ if __name__ == '__main__':
     X_train_std = scaler.fit_transform(train_state)
     X_val_std   = scaler.transform(val_state)
 
+    # -----------------------------
+    # Hyperparameters for soft bootstrapping
+    # -----------------------------
+    bootstrap_iters = 5      # 3–10 is typical; 0 = disable (original hard labels)
+    beta = 0.95              # 0.9–0.99; higher = more trust in original labels
+
     # evaluate all lambdas (parallel)
     outputs = Parallel(
         n_jobs=64,
@@ -97,7 +142,9 @@ if __name__ == '__main__':
         delayed(ridge_regression_fast)(
             X_train_std, labels_train,
             X_val_std,  labels_val,
-            lam
+            lam,
+            bootstrap_iters=bootstrap_iters,
+            beta=beta
         )
         for lam in lambda_values
     )
@@ -106,8 +153,8 @@ if __name__ == '__main__':
 
     # plot the results
     lambdas   = outputs_arr[:, 0]
-    train_acc = outputs_arr[:, 1] * 100
-    test_acc  = outputs_arr[:, 2] * 100
+    train_acc = outputs_arr[:, 3] * 100
+    test_acc  = outputs_arr[:, 4] * 100
 
     idx_best = np.argmax(test_acc)
 
@@ -162,7 +209,7 @@ if __name__ == '__main__':
     plt.grid(True, which='both', linestyle='--', linewidth=0.8)
     plt.tight_layout()
 
-    plt.savefig(f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/lambda-optimization-a-{a:.2f}-u_dc-{u_dc:.2f}.png", dpi=300)
+    plt.savefig(f"/scratch/almo2783/scratch/ml-paper/wavelet-packet/multi-sens/lambda-optimization-a-{a:.2f}-u_dc-{u_dc:.2f}-soft.png", dpi=300)
     plt.close()
 
     # Results dir
@@ -171,10 +218,10 @@ if __name__ == '__main__':
 
     # Save raw metrics
     np.savetxt(
-        f"{results_dir}/results-a-{a:.2f}-u_dc-{u_dc:.2f}-mu-{mu:.2e}.txt",
+        f"{results_dir}/results-a-{a:.2f}-u_dc-{u_dc:.2f}-mu-{mu:.2e}-soft.txt",
         outputs_arr,
-        fmt=["%.0e", "%.6f", "%.6f", "%.6f", "%.6f", "%.6f"],
-        header="lambda,train_acc,val_acc,precision,recall,f1",
+        fmt=["%.0e", "%.6f", "%.6f", "%.6f", "%.6f", "%.6f", "%.6f", "%.6f"],
+        header="lambda,bootstrap_iters,beta,train_acc,val_acc,precision,recall,f1",
         comments=""
     )
 

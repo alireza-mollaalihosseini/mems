@@ -26,7 +26,7 @@ max_concurrent_jobs=15
 sleep_interval=90
 
 count_user_jobs() {
-    bjobs -u almo2783 -q BatchXL | grep -E "(PEND|RUN)" | wc -l
+    bjobs -u almo2783 -q Batch72 | grep -E "(PEND|RUN)" | wc -l
 }
 
 # ----------------------------------
@@ -76,7 +76,7 @@ for f in "${f_values[@]}"; do
     out_file="${results_dir}/err-out/output_f_${f}.txt"
     err_file="${results_dir}/err-out/error_f_${f}.txt"
 
-    bsub -q BatchXL \
+    bsub -q Batch72 \
             -n 64 \
             -J "$job_name" \
             -g "/$job_group" \
