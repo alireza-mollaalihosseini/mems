@@ -151,9 +151,6 @@ def process_file(fname, y_final, N_force, h, c1, c2, c3, c4, c5, phi_dc, a):
     idxs = (np.arange(int(len(data)*frac)) / frac).astype(np.int64)
     signal = data[idxs]
 
-    # signal_buf = np.zeros(N_force, dtype=np.float64)
-    # signal_buf[:len(signal)] = signal
-
     y0 = y_final.copy()
     u_ac_buf = simulate_with_force(y0, N_force, h, c1, c2, c3, c4, c5, phi_dc, a, signal)
 
@@ -181,23 +178,20 @@ def process_file(fname, y_final, N_force, h, c1, c2, c3, c4, c5, phi_dc, a):
         kurtosis(u_ac_buf)
     ]
 
-    return np.array(feats)
+    return np.array(feats, astype=np.float32)
 
 
-def build_state_matrix(train_file_list_path, val_file_list_path, results_dir, a, u_dc, mu, f):
+def build_state_matrix(train_file_list_path, val_file_list_path, test_file_list_path, results_dir, a, u_dc, mu, f):
     # Load filenames
     train_filenames = np.loadtxt(train_file_list_path, dtype=str)
     val_filenames = np.loadtxt(val_file_list_path, dtype=str)
-
-    n_train = len(train_filenames)
-    n_val   = len(val_filenames)
+    test_filenames = np.loadtxt(test_file_list_path, dtype=str)
 
     # Combine for single parallel processing
-    filenames = np.concatenate([train_filenames, val_filenames])
-    n_files = len(filenames)
+    filenames = np.concatenate([train_filenames, val_filenames, test_filenames])
 
     # Simulation params
-    alpha, omega_0, Q_0, tau, beta, gamma, R, kappa = 19.2, f*2*np.pi, 50.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
+    alpha, omega_0, Q_0, tau, beta, gamma, R, kappa = 19.2, f*2*np.pi, 500.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
     u_max = 1.0
     h = 1e-6 * omega_0
     T = 50.0 * omega_0
@@ -236,17 +230,18 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 
-    a = 0.44
+    a = 0.9
     mu = 1.0 
-    u_dc = 0.4
+    u_dc = 1.0
     f = args.f
 
     # Paths
     train_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
     val_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
+    test_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/test-filenames-barcelona-rayson.csv'
 
     # Results dir
     results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results"
     os.makedirs(results_dir, exist_ok=True)
 
-    build_state_matrix(train_files, val_files, results_dir, a, u_dc, mu, f)
+    build_state_matrix(train_files, val_files, test_files, results_dir, a, u_dc, mu, f)

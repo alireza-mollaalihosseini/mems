@@ -54,18 +54,16 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
 
 if __name__ == '__main__':
 
-    a = 0.44
+    a = 0.9
     mu = 1.0 
-    u_dc = 0.4
+    u_dc = 1.0
 
     # lambda_values = np.array([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6])
     lambda_values = np.array([1e-18, 1e-17, 1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10,
                      1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18])
-    # f_values = np.array([8000, 9000, 10000, 11000, 12000])
-    # f_values = np.linspace(8000, 30000, 201)
-    f_values = np.linspace(1000, 50000, 101)
+    f_values = np.linspace(1000, 50000, 981)
 
-    state_matrix = np.zeros((10510, len(f_values) * 16))
+    state_matrix = np.zeros((10910, len(f_values) * 16))
     
     for i, f in enumerate(f_values):
         cols = np.load(f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/f-{int(f)}.npz")["arr_0"]
@@ -74,14 +72,17 @@ if __name__ == '__main__':
     # labels
     labels_train = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
+    lebels_test  = np.load(f"/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_test.npy")
 
     train_state = state_matrix[:len(labels_train)]
-    val_state   = state_matrix[len(labels_train):]
+    val_state   = state_matrix[len(labels_train): len(labels_train) + len(labels_val)]
+    test_state  = state_matrix[len(labels_train) + len(labels_val): ]
 
     # scale PER FOLD (no leakage)
     scaler = StandardScaler()
     X_train_std = scaler.fit_transform(train_state)
     X_val_std   = scaler.transform(val_state)
+    X_test_std  = scaler.transform(test_state)
 
     # evaluate all lambdas (parallel)
     outputs = Parallel(
@@ -173,13 +174,26 @@ if __name__ == '__main__':
         comments=""
     )
 
-    # delete cols
-    for i, f in enumerate(f_values):
-        os.remove(f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/f-{int(f)}.npz")
+    # ridge regression best model on test set
+    best_results = ridge_regression_fast(X_train_std, labels_train,
+                                        X_test_std,  lebels_test,
+                                        best_lambda)
 
-    err_out_dir = Path(
-        f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/err-out"
-    )
+    print("Best model on TEST set:")
+    print(f"Lambda: {best_results[0]:.1e}")
+    print(f"Train Accuracy: {best_results[1]*100:.2f}%")
+    print(f"Test Accuracy: {best_results[2]*100:.2f}%")
+    print(f"Precision: {best_results[3]*100:.2f}%")
+    print(f"Recall: {best_results[4]*100:.2f}%")
+    print(f"F1 Score: {best_results[5]*100:.2f}%")
 
-    if err_out_dir.exists():
-        shutil.rmtree(err_out_dir)
+    # # delete cols
+    # for i, f in enumerate(f_values):
+    #     os.remove(f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/f-{int(f)}.npz")
+
+    # err_out_dir = Path(
+    #     f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results/err-out"
+    # )
+
+    # if err_out_dir.exists():
+    #     shutil.rmtree(err_out_dir)

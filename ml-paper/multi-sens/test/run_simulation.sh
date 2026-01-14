@@ -6,13 +6,14 @@
 
 
 # f grid = linspace(8000, 30000, 201)
-# f_values=($(seq 1000 50 50000))
-f_values=($(seq 1000 490 50000))
+f_values=($(seq 1000 50 50000))
+# f_values=($(seq 1000 490 50000))
 # f_values=($(seq 8000 110 30000))
 # f_values=($(seq 8000 1000 12000))
 
 mu=1.0  # Hardcoded, not looped
-u_dc=0.4  # Hardcoded, not looped
+u_dc=1.0  # Hardcoded, not looped
+a=0.9
 
 # ----------------------------------
 # Output dirs
@@ -23,8 +24,8 @@ mkdir -p "${results_dir}/err-out"
 # ----------------------------------
 # Submission control
 # ----------------------------------
-max_concurrent_jobs=10
-sleep_interval=60
+max_concurrent_jobs=16
+sleep_interval=90
 
 failed_log="${results_dir}/err-out/failed_jobs.log"
 
@@ -39,7 +40,8 @@ total_jobs=$(( ${#f_values[@]} ))
 job_count=0
 
 echo "Starting grid search:"
-echo "  a values  : ${#f_values[@]}"
+echo "  a values  : ${a}"
+echo "  u_dc values  : ${u_dc}"
 echo "  TOTAL JOBS: $total_jobs"
 echo "Target concurrency: $max_concurrent_jobs"
 echo ""
@@ -81,18 +83,18 @@ echo ""
 echo "All grid jobs submitted: $job_count / $total_jobs"
 echo "Monitor with: bjobs -u almo2783 -q BatchXL"
 
-# ----------------------------------
-# Ridge Regression
-# ----------------------------------
+# # ----------------------------------
+# # Ridge Regression
+# # ----------------------------------
 
-# wait for 3 mins
-sleep 180
+# # wait for 3 mins
+# sleep 180
 
-bsub -q BatchXL \
-     -n 64 \
-     -J "ridge" \
-     -o "${results_dir}/err-out/output_ridge.txt" \
-     -e "${results_dir}/err-out/error_ridge.txt" \
-     python3 ridge.py \
-     && echo "Submitted: ridge regression" \
-     || echo "FAILED: ridge regression" >> "$failed_log"
+# bsub -q BatchXL \
+#      -n 64 \
+#      -J "ridge" \
+#      -o "${results_dir}/err-out/output_ridge.txt" \
+#      -e "${results_dir}/err-out/error_ridge.txt" \
+#      python3 ridge.py \
+#      && echo "Submitted: ridge regression" \
+#      || echo "FAILED: ridge regression" >> "$failed_log"
