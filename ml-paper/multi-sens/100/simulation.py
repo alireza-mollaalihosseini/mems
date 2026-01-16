@@ -157,28 +157,152 @@ def process_file(fname, y_final, N_force, h, c1, c2, c3, c4, c5, phi_dc, a):
     du  = np.diff(u_ac_buf)
     d2u = np.diff(u_ac_buf, n=2)
 
+    abs_u = np.abs(u_ac_buf)
+    abs_du = np.abs(du)
+    abs_d2u = np.abs(d2u)
+
+    rms_u = np.sqrt(np.mean(u_ac_buf**2))
+    rms_du = np.sqrt(np.mean(du**2))
+    rms_d2u = np.sqrt(np.mean(d2u**2))
+
+    peak_u = np.max(abs_u)
+    peak_du = np.max(abs_du)
+    peak_d2u = np.max(abs_d2u)
+
+    mean_abs_u = np.mean(abs_u)
+    mean_abs_du = np.mean(abs_du)
+    mean_abs_d2u = np.mean(abs_d2u)
+
+    crest_u = peak_u / rms_u if rms_u > 0 else 0.0
+    crest_du = peak_du / rms_du if rms_du > 0 else 0.0
+    crest_d2u = peak_d2u / rms_d2u if rms_d2u > 0 else 0.0
+
+    shape_u = rms_u / mean_abs_u if mean_abs_u > 0 else 0.0
+    shape_du = rms_du / mean_abs_du if mean_abs_du > 0 else 0.0
+    shape_d2u = rms_d2u / mean_abs_d2u if mean_abs_d2u > 0 else 0.0
+
+    impulse_u = peak_u / mean_abs_u if mean_abs_u > 0 else 0.0
+    impulse_du = peak_du / mean_abs_du if mean_abs_du > 0 else 0.0
+    impulse_d2u = peak_d2u / mean_abs_d2u if mean_abs_d2u > 0 else 0.0
+
+    # Clearance factor – precompute for consistency
+    sqrt_abs_mean_u = np.mean(np.sqrt(abs_u))
+    sqrt_abs_mean_du = np.mean(np.sqrt(abs_du))
+    sqrt_abs_mean_d2u = np.mean(np.sqrt(abs_d2u))
+
+    clearance_u = peak_u / (sqrt_abs_mean_u ** 2) if sqrt_abs_mean_u > 0 else 0.0
+    clearance_du = peak_du / (sqrt_abs_mean_du ** 2) if sqrt_abs_mean_du > 0 else 0.0
+    clearance_d2u = peak_d2u / (sqrt_abs_mean_d2u ** 2) if sqrt_abs_mean_d2u > 0 else 0.0
+
+    # Skewness & kurtosis on all signals
+    skew_u = skew(u_ac_buf)
+    kurt_u = kurtosis(u_ac_buf)
+    skew_du = skew(du)
+    kurt_du = kurtosis(du)
+    skew_d2u = skew(d2u)
+    kurt_d2u = kurtosis(d2u)
+
+    # Robust statistics
+    median_u = np.median(u_ac_buf)
+    p25_u, p75_u = np.percentile(u_ac_buf, [25, 75])
+    iqr_u = p75_u - p25_u
+
+    median_du = np.median(du)
+    p25_du, p75_du = np.percentile(du, [25, 75])
+    iqr_du = p75_du - p25_du
+
+    median_d2u = np.median(d2u)
+    p25_d2u, p75_d2u = np.percentile(d2u, [25, 75])
+    iqr_d2u = p75_d2u - p25_d2u
+
+    # Normalized position of peak (on absolute value)
+    norm_argmax_u = np.argmax(abs_u) / len(u_ac_buf)
+    norm_argmax_du = np.argmax(abs_du) / len(du)
+    norm_argmax_d2u = np.argmax(abs_d2u) / len(d2u)
+
+    # Zero-crossing rate
+    zcr_u = np.sum(np.diff(np.signbit(u_ac_buf))) / (len(u_ac_buf) - 1.0)  # signbit for robustness
+    zcr_du = np.sum(np.diff(np.signbit(du))) / (len(du) - 1.0)
+    zcr_d2u = np.sum(np.diff(np.signbit(d2u))) / (len(d2u) - 1.0)
+
+    # Peak-to-peak on all signals
+    ptp_u = np.ptp(u_ac_buf)
+    ptp_du = np.ptp(du)
+    ptp_d2u = np.ptp(d2u)
+
+    # === Extended feature list ===
+    # All original features are preserved in their relative positions/groups,
+    # and new related features are inserted immediately after the corresponding original ones.
     feats = [
+        # Location & spread (original means/stds + robust extensions)
         np.mean(u_ac_buf),
         np.std(u_ac_buf),
+        median_u,
+        p25_u,
+        p75_u,
+        iqr_u,
+        mean_abs_u,                     # useful companion to mean
+
         np.mean(du),
         np.std(du),
+        median_du,
+        p25_du,
+        p75_du,
+        iqr_du,
+        mean_abs_du,
+
         np.mean(d2u),
         np.std(d2u),
+        median_d2u,
+        p25_d2u,
+        p75_d2u,
+        iqr_d2u,
+        mean_abs_d2u,
 
-        np.max(u_ac_buf),
-        np.argmax(u_ac_buf),
+        # Peak values & positions (original raw max/argmax + absolute/normalized extensions)
+        np.max(u_ac_buf),               # raw max (kept exactly as original)
+        np.argmax(u_ac_buf),            # raw argmax (kept exactly as original)
+        peak_u,                         # absolute peak
+        norm_argmax_u,                  # normalized absolute argmax
+
         np.max(du),
         np.argmax(du),
+        peak_du,
+        norm_argmax_du,
+
         np.max(d2u),
         np.argmax(d2u),
+        peak_d2u,
+        norm_argmax_d2u,
 
-        np.sqrt(np.mean(u_ac_buf**2)),  # RMS
-        np.ptp(u_ac_buf),
-        skew(u_ac_buf),
-        kurtosis(u_ac_buf)
+        # Amplitude measures (original RMS/ptp for u + extensions to du/d2u)
+        rms_u,                          # original RMS
+        rms_du,
+        rms_d2u,
+
+        ptp_u,                          # original ptp
+        ptp_du,
+        ptp_d2u,
+
+        # Shape / impulsiveness factors (new – grouped together)
+        crest_u, crest_du, crest_d2u,
+        shape_u, shape_du, shape_d2u,
+        impulse_u, impulse_du, impulse_d2u,
+        clearance_u, clearance_du, clearance_d2u,
+
+        # Higher-order moments (original skew/kurt for u + extensions)
+        skew_u,                         # original skew
+        kurt_u,                         # original kurtosis
+        skew_du,
+        kurt_du,
+        skew_d2u,
+        kurt_d2u,
+
+        # Additional cheap proxies
+        zcr_u, zcr_du, zcr_d2u,
     ]
 
-    return np.array(feats)
+    return np.array(feats, dtype=np.float32)
 
 
 def build_state_matrix(train_file_list_path, val_file_list_path, test_file_list_path, results_dir, a, u_dc, mu, f):
@@ -225,6 +349,9 @@ def build_state_matrix(train_file_list_path, val_file_list_path, test_file_list_
 
 import argparse
 parser = argparse.ArgumentParser()
+
+# parser.add_argument('--a', type=float, required=True, help='Value of a to process')
+# parser.add_argument('--u_dc', type=float, required=True, help='Value of u_dc to process')
 parser.add_argument('--f', type=float, required=True, help='Value of f to process')
 args = parser.parse_args()
 
@@ -241,7 +368,7 @@ if __name__ == '__main__':
     test_files = '/scratch/almo2783/scratch/rayson/design1/barcelona/test-filenames-barcelona-rayson.csv'
 
     # Results dir
-    results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/test/results"
+    results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/results"
     os.makedirs(results_dir, exist_ok=True)
 
     build_state_matrix(train_files, val_files, test_files, results_dir, a, u_dc, mu, f)

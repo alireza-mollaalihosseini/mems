@@ -1,0 +1,1 @@
+Here is simulation of 101 sensors with various resonance frequencies (1K-50K). in this folder the feature extraction method from timeseries were improved (60 features) by adding more statistical values in order to compare it with the previous features (16 features).

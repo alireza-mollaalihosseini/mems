@@ -1,0 +1,59 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from matplotlib.colors import LinearSegmentedColormap
+plt.style.use("ggplot")
+
+# Parameters
+a_value = 0.9
+u_dc_value = 1.0
+lambda_value = 1e2  # Only use lambda = 1e4
+# top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 
+#                 200, 300, 400, 500, 550, 600, 650, 700, 750, 800, 900, 1000, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000,
+#        2050, 2100, 2150, 2200, 2250, 2300, 2350, 2400, 2450, 2500, 3000, 
+#                 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 10000, 11000, 12000, 13000, 13248]
+top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1300, 1400, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6060]
+
+
+
+# Plotting
+# plt.style.use('dark_background')
+plt.figure(figsize=(16, 8))
+
+# Initialize data storage
+test_accuracies = []
+
+# Extract accuracy data for lambda = 1e4
+for top_k in top_k_values:
+    try:
+        data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda-{lambda_value}.txt")
+        test_accuracy = data[2] * 100  # Convert to percentage
+        test_accuracies.append(test_accuracy)
+
+    except Exception as e:
+        test_accuracies.append(np.nan)
+        for label in class_labels:
+            class_accuracies[label].append(np.nan)  # Fill with NaNs if data is missing
+
+
+# print highst test accuracy
+print(f"Highest val accuracy: {np.nanmax(test_accuracies)} at top-k = {top_k_values[np.nanargmax(test_accuracies)]}")
+
+# save accuracies
+np.save(f"val-acc-topk-random-forrest-gini.npy", test_accuracies)
+
+# Plot test accuracy in **black**
+plt.plot(top_k_values, test_accuracies, marker='o', linewidth=2, label=f"Val. Acc. for gini")
+
+# Customize the plot
+plt.xscale('log')  # Log scale for nodes
+plt.grid(True, linestyle='--', alpha=0.5)
+# plt.legend(loc='best', fontsize=20)
+plt.xticks(top_k_values, labels=[f'{n}' for n in top_k_values], rotation=90, fontsize=15)
+plt.yticks(fontsize=40)
+plt.tight_layout()
+plt.legend(fontsize=20)
+
+# Save the figure
+plt.savefig(f"accuracy_vs_topk.png", bbox_inches='tight')
+plt.close()
