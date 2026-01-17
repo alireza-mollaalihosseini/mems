@@ -26,7 +26,7 @@ test_accuracies = []
 # Extract accuracy data for lambda = 1e4
 for top_k in top_k_values:
     try:
-        data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda-opt.txt")
+        data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/top_64/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda-opt.txt")
         test_accuracy = data[2] * 100  # Convert to percentage
         test_accuracies.append(test_accuracy)
 

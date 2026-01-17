@@ -126,8 +126,8 @@ if __name__ == "__main__":
     os.makedirs(results_dir, exist_ok=True)
 
     # load scores from gini
-    ranked_idx = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/feature_ranking_idx.npy")
-    rf_scores = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/feature_importances.npy")
+    ranked_idx = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/top_64/gini/feature_ranking_idx.npy")
+    rf_scores = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/top_64/gini/feature_importances.npy")
 
     # Run in parallel
     Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
