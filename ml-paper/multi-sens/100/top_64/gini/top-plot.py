@@ -12,7 +12,7 @@ u_dc_value = 1.0
 #                 200, 300, 400, 500, 550, 600, 650, 700, 750, 800, 900, 1000, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000,
 #        2050, 2100, 2150, 2200, 2250, 2300, 2350, 2400, 2450, 2500, 3000, 
 #                 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 10000, 11000, 12000, 13000, 13248]
-top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1300, 1400, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6060]
+top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 2000, 2500, 3000, 3500, 3840]
 
 
 
@@ -26,8 +26,7 @@ test_accuracies = []
 # Extract accuracy data for lambda = 1e4
 for top_k in top_k_values:
     try:
-        # data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda-{lambda_value}.txt")
-        data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda.opt.txt")
+        data = np.loadtxt(f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda-opt.txt")
         test_accuracy = data[2] * 100  # Convert to percentage
         test_accuracies.append(test_accuracy)
 
@@ -56,6 +55,5 @@ plt.tight_layout()
 plt.legend(fontsize=20)
 
 # Save the figure
-plt.savefig(f"accuracy_vs_topk.png", bbox_inches='tight')
 plt.savefig(f"accuracy_vs_topk-lambda-opt.png", bbox_inches='tight')
 plt.close()
