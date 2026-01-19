@@ -1,0 +1,1 @@
+this folder investigate the performance of our model with 3cities dataset (larger dataset). it also includes soft-lablel model for better performance.
