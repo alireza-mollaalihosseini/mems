@@ -97,10 +97,20 @@ if __name__ == "__main__":
     u_dc_value = 1.0
     mu = 1.0
     lambda_values = np.array([1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4])
-    top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
-                     1200, 1300, 1310, 1320, 1330, 1340, 1350, 1360, 1370, 1380, 1390, 1400, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6060]
+    top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 
+                    600, 610, 620, 630, 640, 650, 660, 670, 680, 690, 700, 800, 900, 1000, 1100, 1200, 
+                    1300, 1400, 1500, 2000, 2500, 3000, 3500, 3840]
 
-    f_values = np.linspace(1000, 50000, 101)
+    # f_values = np.linspace(1000, 50000, 101)
+    f_values = np.array([43630, 44120, 42650, 45590,  6390, 44610, 23540, 45100,  6880,
+       42160,  2960, 46080, 43140, 24030, 49510, 39220,  3940,  5410,
+       38730, 37260,  3450, 25010, 20600, 20110,  5900, 41180,  4430,
+        4920, 24520, 47060, 40200, 37750, 41670, 46570, 50000, 39710,
+       38240, 36770, 48040, 48530,  7370, 18640, 49020,  2470, 47550,
+       40690, 22070, 36280, 23050,  7860, 19620, 18150, 19130, 35300,
+       21090, 28930, 21580, 25990,  8840, 11290,  8350,  9330,  1980,
+       35790])
+    f_values = np.sort(f_values)
 
     state_matrix = np.zeros((10910, len(f_values) * 60))
 
@@ -124,12 +134,12 @@ if __name__ == "__main__":
     X_test  = scaler.transform(X_test)
 
     # Results dir
-    results_dir = f"/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/results"
+    results_dir = f"/scratch/almo2783/scratch/test/results"
     os.makedirs(results_dir, exist_ok=True)
 
     # load scores from gini
-    ranked_idx = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/feature_ranking_idx.npy")
-    rf_scores = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/feature_importances.npy")
+    ranked_idx = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/top_64/gini/feature_ranking_idx.npy")
+    rf_scores = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/top_64/gini/feature_importances.npy")
 
     # Run in parallel
     results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(

@@ -49,56 +49,50 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
 
 
 
-def process_top_k(top_k, ranked_idx, X_train, X_val,
-                  labels_train, labels_val,
-                  lambda_values, a_value, u_dc_value, results_dir):
-
+def process_top_k(top_k, ranked_idx, X_train, X_val, labels_train, labels_val, lambda_values, a_value, u_dc_value, results_dir):
     selected_idx = ranked_idx[:top_k]
-    X_train_sel = X_train[:, selected_idx]
-    X_val_sel   = X_val[:, selected_idx]
+    X_train_selected = X_train[:, selected_idx]
+    X_val_selected   = X_val[:, selected_idx]
 
+    # Standardize
     scaler = StandardScaler()
-    X_train_sel = scaler.fit_transform(X_train_sel)
-    X_val_sel   = scaler.transform(X_val_sel)
+    X_train_selected = scaler.fit_transform(X_train_selected)
+    X_val_selected   = scaler.transform(X_val_selected)
 
     best_val_acc = -np.inf
-    best_lambda  = None
-    best_results = None
+    best_lambda = None
+    best_results = []
 
-    for lam in lambda_values:
+    for lambda_value in lambda_values:
+
         results = ridge_regression_fast(
-            X_train_sel, labels_train,
-            X_val_sel, labels_val,
-            lam
+            X_train_selected, labels_train, X_val_selected, labels_val, 
+            lambda_value
         )
 
-        val_acc = results[2]
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_lambda  = lam
-            best_results = results
+        if results[2] > best_val_acc:
+            best_val_acc   = results[2]
+            best_lambda    = results[0]
+            best_results   = results
 
-    # Save per-top-k best
-    np.savetxt(
-        f"{results_dir}/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}.txt",
-        best_results.reshape(1, -1),
-        fmt="%.6f"
-    )
 
-    return {
-        "top_k": top_k,
-        "lambda": best_lambda,
-        "val_acc": best_val_acc
-    }
+    # Save results
+    np.savetxt(f"{results_dir}/results-a-{a_value:.2f}-u_dc-{u_dc_value:.2f}-topk-{top_k}-lambda.opt.txt",
+               np.array(best_results).reshape(1, -1), fmt="%.5f")
 
 
 if __name__ == "__main__":
     a_value = 0.9
     u_dc_value = 1.0
-    mu = 1.0
+    # lambda_value = 1e2
     lambda_values = np.array([1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4])
-    top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
-                     1200, 1300, 1310, 1320, 1330, 1340, 1350, 1360, 1370, 1380, 1390, 1400, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6060]
+    top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1300, 1400, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6060]
+    # top_k_values = [1, 2, 3, 4, 5, 6, 7, 8, 9 ,10, 20, 25, 30, 35, 40, 45, 50, 100, 
+    #             200, 300, 400, 500, 550, 600, 650, 700, 750, 800, 900, 1000, 1500, 2000, 2500, 3000, 
+    #             3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 10000, 11000, 12000, 13000, 13248]
+    # top_k_values = [1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000,
+    #    2050, 2100, 2150, 2200, 2250, 2300, 2350, 2400, 2450, 2500]
+    mu = 1.0
 
     f_values = np.linspace(1000, 50000, 101)
 
@@ -132,49 +126,10 @@ if __name__ == "__main__":
     rf_scores = np.load("/scratch/almo2783/scratch/ml-paper/multi-sens/100/gini/feature_importances.npy")
 
     # Run in parallel
-    results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
+    Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
         delayed(process_top_k)(
-            top_k, ranked_idx,
-            X_train, X_val,
-            labels_train, labels_val,
-            lambda_values,
-            a_value, u_dc_value,
-            results_dir
+            top_k, ranked_idx, X_train, X_val, labels_train, labels_val,
+            lambda_values, a_value, u_dc_value, results_dir
         )
         for top_k in top_k_values
-    )
-
-    best_entry = max(results, key=lambda x: x["val_acc"])
-
-    best_top_k   = best_entry["top_k"]
-    best_lambda  = best_entry["lambda"]
-
-    print(f"Best validation result:")
-    print(f"  top_k   = {best_top_k}")
-    print(f"  lambda  = {best_lambda}")
-    print(f"  val_acc = {best_entry['val_acc']:.5f}")
-    
-    selected_idx = ranked_idx[:best_top_k]
-
-    X_train_sel = X_train[:, selected_idx]
-    X_test_sel  = X_test[:, selected_idx]
-
-    scaler = StandardScaler()
-    X_train_sel = scaler.fit_transform(X_train_sel)
-    X_test_sel  = scaler.transform(X_test_sel)
-
-    results = ridge_regression_fast(
-        X_train_sel, labels_train,
-        X_test_sel, lebels_test,
-        best_lambda
-    )
-
-    print("\nTest set results with best configuration:")
-    print(
-        f"Lambda: {results[0]:.5f}, "
-        f"Train Acc: {results[1]:.5f}, "
-        f"Test Acc: {results[2]:.5f}, "
-        f"Precision: {results[3]:.5f}, "
-        f"Recall: {results[4]:.5f}, "
-        f"F1: {results[5]:.5f}"
     )
