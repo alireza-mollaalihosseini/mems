@@ -319,18 +319,25 @@ if __name__ == '__main__':
     labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
-    np.random.seed(42)  # reproducible
+    # --- Subsampling ---
+    np.random.seed(42)
     indices = np.random.permutation(len(filenames))
-    sub_files = 1500  # adjust
+    sub_files = 500
     sub_idx = indices[:sub_files]
 
     sub_filenames = filenames[sub_idx]
-    sub_labels_train = labels_train[:len(labels_train)]  # adjust split accordingly
-    sub_labels_val = labels_val if len(sub_idx) > len(labels_train) else np.array([])
-    # If val subset needed:
+
+    # 🔴 FIX: align labels with filenames
+    labels = np.concatenate([labels_train, labels_val])
+    sub_labels = labels[sub_idx]
+
     train_sub_count = int(sub_files * (len(labels_train) / len(filenames)))
+
     sub_train_filenames = sub_filenames[:train_sub_count]
-    sub_val_filenames = sub_filenames[train_sub_count:]
+    sub_val_filenames   = sub_filenames[train_sub_count:]
+
+    sub_labels_train = sub_labels[:train_sub_count]
+    sub_labels_val   = sub_labels[train_sub_count:]
 
     # sub_f_values = np.sort(np.random.choice(f_values, size=20, replace=False))
 

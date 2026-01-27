@@ -220,8 +220,8 @@ def extract_features(u_ac_buf):
 
     return np.array(feats, dtype=np.float32)
 
-
-def compute_transient(f, a, mu, u_dc):
+# Assume compute_transient now returns a_i as well
+def compute_transient(f, a_i, mu, u_dc_i):
     omega_0 = f * 2 * np.pi
     h = 1e-6 * omega_0
 
@@ -233,13 +233,13 @@ def compute_transient(f, a, mu, u_dc):
     c3 = 1 / (tau * omega_0)
     c4 = (kappa * l_0) / u_max
     c5 = mu / (l_0 * omega_0**2)
-    phi_dc = u_dc / u_max
+    phi_dc = u_dc_i / u_max  # per-frequency
 
-    y_final = simulate_transient(50000000, h, c1, c2, c3, c4, phi_dc, a)
-    return (y_final, h, c1, c2, c3, c4, c5, phi_dc)
+    y_final = simulate_transient(50000000, h, c1, c2, c3, c4, phi_dc, a_i)
+    return (y_final, h, c1, c2, c3, c4, c5, phi_dc, a_i)
 
 
-def process_one_file(fname, precomp_list, a):
+def process_one_file(fname, precomp_list):
     data, sr = sf.read(fname)
     
     new_len = 1000000
@@ -253,7 +253,7 @@ def process_one_file(fname, precomp_list, a):
     n_freq = len(precomp_list)
     file_features = np.empty((n_freq * 60,), dtype=np.float32)
 
-    for i, (y_final, h, c1, c2, c3, c4, c5, phi_dc) in enumerate(precomp_list):
+    for i, (y_final, h, c1, c2, c3, c4, c5, phi_dc, a) in enumerate(precomp_list):
         u_ac_buf = simulate_with_force(y_final, new_len, h, c1, c2, c3, c4, c5, phi_dc, a, signal)
         feats = extract_features(u_ac_buf)
         file_features[i*60:(i+1)*60] = feats
@@ -296,22 +296,31 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
     return results
 
 
-def objective(trial, f_values, sub_filenames, train_sub_count, sub_labels_train, sub_labels_val):
-    a = trial.suggest_float("a", 0.5, 1.5)
-    u_dc = trial.suggest_float("u_dc", 0.5, 1.5)
-    
-    # Precompute transients for sub_f_values with these params
-    precomp_list = Parallel(n_jobs=32)(
-        delayed(compute_transient)(f, a, mu, u_dc) for f in f_values
+def objective(trial, f_values, sub_filenames, train_sub_count, sub_labels_train, sub_labels_val, mu=1.0):
+    n_freq = len(f_values)
+
+    # Suggest independent a_i and u_dc_i for each sensor
+    a_list = []
+    u_dc_list = []
+    for i in range(n_freq):
+        a_i = trial.suggest_float(f"a_{i}", -25, 25)
+        u_dc_i = trial.suggest_float(f"u_dc_{i}", 0.0, 1.0)
+        a_list.append(a_i)
+        u_dc_list.append(u_dc_i)
+
+    # Precompute transients — now per-frequency a_i and u_dc_i
+    precomp_list = Parallel(n_jobs=32, backend="multiprocessing")(
+        delayed(compute_transient)(f_values[i], a_list[i], mu, u_dc_list[i])
+        for i in range(n_freq)
     )
 
-    # Process subset files
+    # Process files
     results = Parallel(n_jobs=64, backend="multiprocessing")(
-        delayed(process_one_file)(fname, precomp_list, a) for fname in sub_filenames
+        delayed(process_one_file)(fname, precomp_list) for fname in sub_filenames
     )
+
     state_matrix = np.vstack(results)
 
-    # Split (adjust indices based on your subsample split)
     train_state = state_matrix[:train_sub_count]
     val_state = state_matrix[train_sub_count:]
 
@@ -350,29 +359,37 @@ if __name__ == '__main__':
     labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
-    np.random.seed(42)  # reproducible
+    # --- Subsampling ---
+    np.random.seed(42)
     indices = np.random.permutation(len(filenames))
-    sub_files = 1500  # adjust
+    sub_files = 500
     sub_idx = indices[:sub_files]
 
     sub_filenames = filenames[sub_idx]
-    sub_labels_train = labels_train[:len(labels_train)]  # adjust split accordingly
-    sub_labels_val = labels_val if len(sub_idx) > len(labels_train) else np.array([])
-    # If val subset needed:
+
+    # 🔴 FIX: align labels with filenames
+    labels = np.concatenate([labels_train, labels_val])
+    sub_labels = labels[sub_idx]
+
     train_sub_count = int(sub_files * (len(labels_train) / len(filenames)))
+
     sub_train_filenames = sub_filenames[:train_sub_count]
-    sub_val_filenames = sub_filenames[train_sub_count:]
+    sub_val_filenames   = sub_filenames[train_sub_count:]
+
+    sub_labels_train = sub_labels[:train_sub_count]
+    sub_labels_val   = sub_labels[train_sub_count:]
 
     # Create or resume Optuna study with SQLite storage
     study = optuna.create_study(
         study_name="64_sens_optimization",
         direction="maximize",
         storage=f"sqlite:///optuna.db",
-        load_if_exists=True
+        load_if_exists=True,
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=20, n_warmup_steps=10)
     )
     
     # Optimize (adjust n_trials as needed)
     study.optimize(
-        lambda trial: objective(trial, f_values, sub_filenames, train_sub_count, sub_labels_train, sub_labels_val),
-        n_trials=100
+        lambda trial: objective(trial, f_values, sub_filenames, train_sub_count, sub_labels_train, sub_labels_val, mu),
+        n_trials=1000
     )
