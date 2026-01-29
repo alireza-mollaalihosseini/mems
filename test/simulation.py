@@ -308,7 +308,7 @@ if __name__ == '__main__':
     #    40690, 22070, 36280, 23050,  7860, 19620, 18150, 19130, 35300,
     #    21090, 28930, 21580, 25990,  8840, 11290,  8350,  9330,  1980,
     #    35790]))
-    f_values = np.linspace(1000, 150000, 101)
+    f_values = np.linspace(1000, 50000, 101)
 
     train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
     val_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
