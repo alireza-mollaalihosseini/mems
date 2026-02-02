@@ -160,8 +160,11 @@ f_values = np.sort(np.array([43630, 44120, 42650, 45590,  6390, 44610, 23540, 45
    40690, 22070, 36280, 23050,  7860, 19620, 18150, 19130, 35300,
    21090, 28930, 21580, 25990,  8840, 11290,  8350,  9330,  1980,
    35790]))
+
+f_values = f_values[f_values>=18000]
 # f_values = [1980]
-a_values = np.linspace(-25, 25, 501)
+# a_values = np.linspace(-25, 25, 501)
+a_values = np.linspace(-100, 250, 1001)
 u_dc_values = np.linspace(0.01, 1, 100)
 
 
