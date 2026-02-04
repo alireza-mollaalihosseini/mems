@@ -221,7 +221,8 @@ def extract_features(u_ac_buf):
     return np.array(feats, dtype=np.float32)
 
 
-def compute_transient(f, a, u_dc, mu=1.0):
+def compute_transient(parameters, mu=1.0):
+    f, a, u_dc = parameters
     omega_0 = f * 2 * np.pi
     h = 1e-6 * omega_0
 
@@ -297,6 +298,17 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
 
 
 if __name__ == '__main__':
+
+    train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
+    val_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
+
+    train_filenames = np.loadtxt(train_files_path, dtype=str)
+    val_filenames = np.loadtxt(val_files_path, dtype=str)
+    filenames = np.concatenate([train_filenames, val_filenames])
+
+    labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
+    labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
+
     mu = 1.0
     
     f_values = np.sort(np.array([43630, 44120, 42650, 45590,  6390, 44610, 23540, 45100,  6880,
@@ -311,49 +323,42 @@ if __name__ == '__main__':
     params = pd.read_csv("/scratch/almo2783/scratch/test/opt-par/params.csv")
     a_cols = sorted([c for c in params.columns if c.startswith("Param a_")], key=lambda x: int(x.split("_")[-1]))
     u_cols = sorted([c for c in params.columns if c.startswith("Param u_dc_")], key=lambda x: int(x.split("_")[-1]))
-    a_values = params.loc[0, a_cols].to_numpy(dtype=float)
-    u_dc_values = params.loc[0, u_cols].to_numpy(dtype=float)
 
-    # create a tuple of parameters as (f, a, u_dc)
-    parameter_tuples = [
-        (f_values[i], a_values[i], u_dc_values[i])
-        for i in range(len(f_values))
-    ]
+    for l in range(len(params)):
+        print(f"\nProcessing parameter set {l+1}/{len(params)}")
+        a_values = params.iloc[l+1][a_cols].to_numpy(dtype=float)
+        u_dc_values = params.iloc[l+1][u_cols].to_numpy(dtype=float)
 
-    train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
-    val_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
+        # create a tuple of parameters as (f, a, u_dc)
+        parameter_tuples = [
+            (f_values[i], a_values[i], u_dc_values[i])
+            for i in range(len(f_values))
+        ]
 
-    train_filenames = np.loadtxt(train_files_path, dtype=str)
-    val_filenames = np.loadtxt(val_files_path, dtype=str)
-    filenames = np.concatenate([train_filenames, val_filenames])
+        # Parallel precomputation of transients
+        precomp_list = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
+            delayed(compute_transient)(params) for params in parameter_tuples
+        )
 
-    labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
-    labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
+        # Parallel over files (each file handles all frequencies)
+        results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
+            delayed(process_one_file)(fname, precomp_list) for fname in filenames
+        )
 
-    # Parallel precomputation of transients
-    precomp_list = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-        delayed(compute_transient)(params) for params in parameter_tuples
-    )
+        state_matrix = np.vstack(results)
 
-    # Parallel over files (each file handles all frequencies)
-    results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-        delayed(process_one_file)(fname, precomp_list) for fname in filenames
-    )
+        # Split (adjust indices based on your subsample split)
+        train_state = state_matrix[:len(labels_train)]
+        val_state = state_matrix[len(train_filenames):]
 
-    state_matrix = np.vstack(results)
+        scaler = StandardScaler()
+        X_train_std = scaler.fit_transform(train_state)
+        X_val_std = scaler.transform(val_state)
+        
+        results = ridge_regression_fast(X_train_std, labels_train, X_val_std, labels_val, 1e2)
 
-    # Split (adjust indices based on your subsample split)
-    train_state = state_matrix[:len(labels_train)]
-    val_state = state_matrix[len(train_filenames):]
-
-    scaler = StandardScaler()
-    X_train_std = scaler.fit_transform(train_state)
-    X_val_std = scaler.transform(val_state)
-    
-    results = ridge_regression_fast(X_train_std, labels_train, X_val_std, labels_val, 1e2)
-
-    # target = results[2]
-    print("\nRidge regression results on validation set:")
-    print(f"Lambda: {results[0]}")
-    print(f"Training acc: {results[1]*100:2f} %")
-    print(f"Validation acc: {results[2]*100:.2f} %")
+        # target = results[2]
+        print("\nRidge regression results on validation set:")
+        print(f"Lambda: {results[0]}")
+        print(f"Training acc: {results[1]*100:2f} %")
+        print(f"Validation acc: {results[2]*100:.2f} %")
