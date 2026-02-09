@@ -321,12 +321,12 @@ if __name__ == '__main__':
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
     # Parallel precomputation of transients
-    precomp_list = Parallel(n_jobs=32, backend="multiprocessing", verbose=1)(
+    precomp_list = Parallel(n_jobs=48, backend="multiprocessing", verbose=1)(
         delayed(compute_transient)(f, a, mu, u_dc) for f in f_values
     )
 
     # Parallel over files (each file handles all frequencies)
-    results = Parallel(n_jobs=32, backend="multiprocessing", verbose=1)(
+    results = Parallel(n_jobs=48, backend="multiprocessing", verbose=1)(
         delayed(process_one_file)(fname, precomp_list, a) for fname in filenames
     )
 
