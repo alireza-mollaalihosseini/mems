@@ -66,7 +66,7 @@ if __name__ == "__main__":
     
     full_results = []
     for top_k in top_k_values:
-        f_values = full_f_values[:top_k_values]
+        f_values = full_f_values[:int(top_k)]
         f_values = np.sort(f_values)
 
         state_matrix = np.zeros((10910, len(f_values) * 60))

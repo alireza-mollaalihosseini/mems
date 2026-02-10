@@ -123,7 +123,7 @@ def simulate_for_u_dc(u_dc, a_values, f):
     return col_results
 
 
-a_values = np.linspace(0, 1500, 501)
+a_values = np.linspace(0, 1500, 1501)
 u_dc_values = np.linspace(0.1, 1, 10)
 f_values = np.linspace(1000, 50000, 100, dtype=int)
 
@@ -136,4 +136,4 @@ for f_val in f_values:
 
     extrema_counts = np.array(extrema_counts).T  # shape: (a_values, u_dc_values)
 
-    np.save(f"/scratch/almo2783/scratch/test/a-crit/extrems/extrema_counts_f_{int(f_val)}.npy", extrema_counts)
+    np.save(f"/scratch/almo2783/scratch/test/a-crit/extrems/extrema_counts_f_{int(f_val)}-more.npy", extrema_counts)
