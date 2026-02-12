@@ -297,6 +297,13 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
     return results
 
 
+import argparse
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--u_dc', type=float, required=True, help='Value of u_dc to process')
+args = parser.parse_args()
+
+
 if __name__ == '__main__':
 
     lambda_values = np.array([1e-18, 1e-17, 1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10,
@@ -313,13 +320,16 @@ if __name__ == '__main__':
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
     mu = 1.0
-    u_dc = 0.1
+    # u_dc = 0.1
+    u_dc = args.u_dc
     ratios = np.array([0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3])
     f_values = np.linspace(1000, 50000, 100, dtype=int)
     a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}.npy")
     train_accs = []
     val_accs = []
     lambdas = []
+
+    print(f"Processing u_dc = {u_dc:.1f}")
 
     for ratio in ratios:
         print(f"\nProcessing ratio {ratio}")

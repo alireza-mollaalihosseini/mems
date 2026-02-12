@@ -1,5 +1,5 @@
+import optuna
 import numpy as np
-import pandas as pd
 import soundfile as sf
 from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
@@ -220,13 +220,12 @@ def extract_features(u_ac_buf):
 
     return np.array(feats, dtype=np.float32)
 
-
-def compute_transient(parameters, mu=1.0):
-    f, a, u_dc = parameters
+# Assume compute_transient now returns a_i as well
+def compute_transient(f, a_i, mu, u_dc_i):
     omega_0 = f * 2 * np.pi
     h = 1e-6 * omega_0
 
-    alpha, Q_0, tau, beta, gamma, R, kappa = 19.2, 50.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
+    alpha, Q_0, tau, beta, gamma, R, kappa = 19.2, 500.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
     u_max = 1.0
     l_0 = (alpha * gamma * u_max**2) / (beta * R**2 * omega_0**2)
     c1 = beta / omega_0
@@ -234,10 +233,10 @@ def compute_transient(parameters, mu=1.0):
     c3 = 1 / (tau * omega_0)
     c4 = (kappa * l_0) / u_max
     c5 = mu / (l_0 * omega_0**2)
-    phi_dc = u_dc / u_max
+    phi_dc = u_dc_i / u_max  # per-frequency
 
-    y_final = simulate_transient(50000000, h, c1, c2, c3, c4, phi_dc, a)
-    return (y_final, h, c1, c2, c3, c4, c5, phi_dc, a)
+    y_final = simulate_transient(50000000, h, c1, c2, c3, c4, phi_dc, a_i)
+    return (y_final, h, c1, c2, c3, c4, c5, phi_dc, a_i)
 
 
 def process_one_file(fname, precomp_list):
@@ -297,10 +296,58 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
     return results
 
 
-if __name__ == '__main__':
+def objective(trial, f_values, filenames, train_count, labels_train, labels_val, mu=1.0):
+    n_freq = len(f_values)
 
-    lambda_values = np.array([1e-18, 1e-17, 1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10,
-                     1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18])
+    # Suggest independent a_i and u_dc_i for each sensor
+    a_list = []
+    u_dc_list = []
+    for i in range(n_freq):
+        a_i = trial.suggest_float(f"a_{i}", -50, 50)
+        u_dc_i = trial.suggest_float(f"u_dc_{i}", 0.0, 1.5)
+        a_list.append(a_i)
+        u_dc_list.append(u_dc_i)
+
+    # Precompute transients — now per-frequency a_i and u_dc_i
+    precomp_list = Parallel(n_jobs=64, backend="multiprocessing")(
+        delayed(compute_transient)(f_values[i], a_list[i], mu, u_dc_list[i])
+        for i in range(n_freq)
+    )
+
+    # Process files
+    results = Parallel(n_jobs=64, backend="multiprocessing")(
+        delayed(process_one_file)(fname, precomp_list) for fname in filenames
+    )
+
+    state_matrix = np.vstack(results)
+
+    train_state = state_matrix[:train_count]
+    val_state = state_matrix[train_count:]
+
+    scaler = StandardScaler()
+    X_train_std = scaler.fit_transform(train_state)
+    X_val_std = scaler.transform(val_state)
+
+    ridge_results = ridge_regression_fast(X_train_std, labels_train, X_val_std, labels_val, 1e2)
+    val_acc = ridge_results[2]
+
+    return val_acc
+
+
+
+if __name__ == '__main__':
+    a = 0.9
+    mu = 1.0 
+    u_dc = 1.0
+    
+    f_values = np.sort(np.array([43630, 44120, 42650, 45590,  6390, 44610, 23540, 45100,  6880,
+       42160,  2960, 46080, 43140, 24030, 49510, 39220,  3940,  5410,
+       38730, 37260,  3450, 25010, 20600, 20110,  5900, 41180,  4430,
+        4920, 24520, 47060, 40200, 37750, 41670, 46570, 50000, 39710,
+       38240, 36770, 48040, 48530,  7370, 18640, 49020,  2470, 47550,
+       40690, 22070, 36280, 23050,  7860, 19620, 18150, 19130, 35300,
+       21090, 28930, 21580, 25990,  8840, 11290,  8350,  9330,  1980,
+       35790]))
 
     train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
     val_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/val-filenames-barcelona-rayson.csv'
@@ -308,87 +355,22 @@ if __name__ == '__main__':
     train_filenames = np.loadtxt(train_files_path, dtype=str)
     val_filenames = np.loadtxt(val_files_path, dtype=str)
     filenames = np.concatenate([train_filenames, val_filenames])
+    train_count = len(train_filenames)
 
     labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
-    mu = 1.0
-    u_dc = 0.1
-    ratios = np.array([0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3])
-    f_values = np.linspace(1000, 50000, 100, dtype=int)
-    a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}.npy")
-    train_accs = []
-    val_accs = []
-    lambdas = []
-
-    for ratio in ratios:
-        print(f"\nProcessing ratio {ratio}")
-        a_values = a_crits * ratio
-
-        # create a tuple of parameters as (f, a, u_dc)
-        parameter_tuples = [
-            (f_values[i], a_values[i], u_dc)
-            for i in range(len(f_values))
-        ]
-
-        # Parallel precomputation of transients
-        precomp_list = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-            delayed(compute_transient)(params) for params in parameter_tuples
-        )
-
-        # Parallel over files (each file handles all frequencies)
-        results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-            delayed(process_one_file)(fname, precomp_list) for fname in filenames
-        )
-
-        state_matrix = np.vstack(results)
-
-        # Split (adjust indices based on your subsample split)
-        train_state = state_matrix[:len(labels_train)]
-        val_state = state_matrix[len(train_filenames):]
-
-        scaler = StandardScaler()
-        X_train_std = scaler.fit_transform(train_state)
-        X_val_std = scaler.transform(val_state)
-
-        # evaluate all lambdas (parallel)
-        outputs = Parallel(
-            n_jobs=64,
-            verbose=1,
-            backend="multiprocessing"
-        )(
-            delayed(ridge_regression_fast)(
-                X_train_std, labels_train,
-                X_val_std,  labels_val,
-                lam
-            )
-            for lam in lambda_values
-        )
-
-        outputs_arr = np.vstack(outputs)
-
-        # plot the results
-        lambdas   = outputs_arr[:, 0]
-        train_acc = outputs_arr[:, 1] * 100
-        val_acc   = outputs_arr[:, 2] * 100
-
-        idx_best = np.argmax(val_acc)
-
-        best_val    = val_acc[idx_best]
-        best_train  = train_acc[idx_best]
-        best_lambda = lambdas[idx_best]
-
-        lambdas.append(best_lambda)
-        train_accs.append(best_train)
-        val_accs.append(best_val)
-
-        # target = results[2]
-        print("\nRidge regression results on validation set:")
-        print(f"best Lambda: {best_lambda}")
-        print(f"Training acc: {best_train:2f} %")
-        print(f"Validation acc: {best_val:.2f} %")
-
+    # Create or resume Optuna study with SQLite storage
+    study = optuna.create_study(
+        study_name="64_sens_optimization_all",
+        direction="maximize",
+        storage=f"sqlite:///dynamic-opt.db",
+        load_if_exists=True,
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=20, n_warmup_steps=10)
+    )
     
-    np.save(f"best_lambdas_u_dc-{u_dc:.1f}.npy", np.array(lambdas))
-    np.save(f"training_acc_u_dc-{u_dc:.1f}.npy", np.array(train_accs))
-    np.save(f"validation_acc_u_dc-{u_dc:.1f}.npy", np.array(val_accs))
+    # Optimize (adjust n_trials as needed)
+    study.optimize(
+        lambda trial: objective(trial, f_values, filenames, train_count, labels_train, labels_val, mu),
+        n_trials=500
+    )
