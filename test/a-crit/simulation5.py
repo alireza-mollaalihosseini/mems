@@ -226,7 +226,7 @@ def compute_transient(parameters, mu=1.0):
     omega_0 = f * 2 * np.pi
     h = 1e-6 * omega_0
 
-    alpha, Q_0, tau, beta, gamma, R, kappa = 19.2, 50.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
+    alpha, Q_0, tau, beta, gamma, R, kappa = 19.2, 500.0, 0.001, 1066.0, 1.62e7, 16.5, 0.602e6
     u_max = 1.0
     l_0 = (alpha * gamma * u_max**2) / (beta * R**2 * omega_0**2)
     c1 = beta / omega_0
@@ -324,7 +324,7 @@ if __name__ == '__main__':
     u_dc = args.u_dc
     ratios = np.array([0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3])
     f_values = np.linspace(1000, 50000, 100, dtype=int)
-    a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}.npy")
+    a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}-more.npy")
     train_accs = []
     val_accs = []
     lambdas = []
@@ -406,6 +406,6 @@ if __name__ == '__main__':
         print(f"Validation acc: {best_val:.2f} %")
 
     
-    np.save(f"best_lambdas_u_dc-{u_dc:.1f}.npy", np.array(lambdas))
-    np.save(f"training_acc_u_dc-{u_dc:.1f}.npy", np.array(train_accs))
-    np.save(f"validation_acc_u_dc-{u_dc:.1f}.npy", np.array(val_accs))
+    np.save(f"best_lambdas_u_dc-{u_dc:.1f}-more.npy", np.array(lambdas))
+    np.save(f"training_acc_u_dc-{u_dc:.1f}-more.npy", np.array(train_accs))
+    np.save(f"validation_acc_u_dc-{u_dc:.1f}-more.npy", np.array(val_accs))
