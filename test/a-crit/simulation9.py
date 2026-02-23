@@ -320,7 +320,7 @@ if __name__ == '__main__':
 
     mu = 1.0
     # ratios = np.array([-0.7, -0.3, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3])
-    ratio = 0.2
+    ratio = 0.4
     u_dc = args.u_dc
     f_values = np.linspace(1000, 50000, 100, dtype=int)
     a_crits = np.load("/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-1.0-more.npy")
@@ -388,6 +388,6 @@ if __name__ == '__main__':
     print(f"Training acc: {best_train:2f} %")
     print(f"Validation acc: {best_val:.2f} %")
 
-    np.save(f"best_lambda_u_dc-{u_dc:.1f}-more-ratio-0.2.npy", np.array(best_lambda))
-    np.save(f"training_acc_u_dc-{u_dc:.1f}-more-ratio-0.2.npy", np.array(best_train))
-    np.save(f"validation_acc_u_dc-{u_dc:.1f}-more-ratio-0.2.npy", np.array(best_val))
+    np.save(f"best_lambda_u_dc-{u_dc:.1f}-more-ratio-0.4.npy", np.array(best_lambda))
+    np.save(f"training_acc_u_dc-{u_dc:.1f}-more-ratio-0.4.npy", np.array(best_train))
+    np.save(f"validation_acc_u_dc-{u_dc:.1f}-more-ratio-0.4.npy", np.array(best_val))
