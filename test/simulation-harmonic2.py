@@ -197,12 +197,21 @@ def extract_features(u_ac_buf):
 def compute_transient(parameters, mu=1.0):
     f, a, u_dc = parameters          # a, u_dc are ignored (linear model)
     omega_0 = f * 2 * np.pi
-    h = (1/44100) * omega_0
+    h = 1e-6 * omega_0
     Q_0 = 500.0
     c2 = 1 / Q_0
     c5 = mu
 
-    y_final = simulate_transient_linear(10_000_000, h, c2)
+    f_min, f_max = 1000, 50000
+    N_min, N_max = 100_000_000, 200_000
+
+    # linear interpolation
+    m = (N_max - N_min) / (f_max - f_min)
+    b = N_min - m * f_min
+
+    N_steps = int(m * f + b)
+
+    y_final = simulate_transient_linear(N_steps, h, c2)
     return (y_final, h, c2, c5)      # 4-tuple now
 
 
@@ -211,13 +220,19 @@ def compute_transient(parameters, mu=1.0):
 # =============================================================================
 def process_one_file(fname, precomp_list):
     data, sr = sf.read(fname)
+    
+    new_len = 1_000_000
+    frac = new_len / sr
+    idxs_len = int(len(data) * frac)
+    idxs = (np.arange(idxs_len) / frac).astype(np.int64)
+    signal = data[idxs].astype(np.float32)
 
     n_freq = len(precomp_list)
     file_features = np.empty((n_freq * 60,), dtype=np.float32)
 
     for i, precomp in enumerate(precomp_list):
         y_final, h, c2, c5 = precomp          # 4 values
-        u_ac_buf = simulate_with_force_linear(y_final, len(data), h, c2, c5, data)
+        u_ac_buf = simulate_with_force_linear(y_final, new_len, h, c2, c5, signal)
         feats = extract_features(u_ac_buf)
         file_features[i*60:(i+1)*60] = feats
 
@@ -279,7 +294,7 @@ if __name__ == '__main__':
     mu = 1.0
     a = 0.9
     u_dc = 1.0
-    f_values = np.linspace(10, 5000, 100, dtype=int)
+    f_values = np.linspace(1000, 50000, 100, dtype=int)
 
     # create a tuple of parameters as (f, a, u_dc)
     parameter_tuples = [
