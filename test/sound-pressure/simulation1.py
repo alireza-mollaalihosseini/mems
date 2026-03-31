@@ -299,7 +299,8 @@ if __name__ == '__main__':
     a = 0.5
     u_dc = 0.3
     f_values = np.linspace(1_000, 50_000, 100, dtype=np.int64)
-    mu_values = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0])
+    # mu_values = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0])
+    mu_values = np.array([100_000.0, 1_000_000.0, 10_000_000.0, 100_000_000.0])
     lambda_values = np.array([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6])
 
     train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
@@ -378,6 +379,6 @@ if __name__ == '__main__':
         print(f"Training acc: {best_train:2f} %")
         print(f"Validation acc: {best_val:.2f} %")
     
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(lambdas))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(train_accs))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(val_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas-a-{a:.2f}-u_dc-{u_dc:.2f}-2.npy", np.array(lambdas))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-2.npy", np.array(train_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-2.npy", np.array(val_accs))

@@ -6,7 +6,6 @@ from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
 from numba import njit
 
-
 @njit(fastmath=True)
 def rk4_step_inplace(y, h, c1, c2, c3, c4, phi_dc, a, k1, k2, k3, k4, y_temp):
     exsi, etta, psy, phi_ac = y
@@ -221,8 +220,7 @@ def extract_features(u_ac_buf):
     return np.array(feats, dtype=np.float32)
 
 
-def compute_transient(parameters, mu=1.0):
-    f, a, u_dc = parameters
+def compute_transient(f, a, mu, u_dc):
     omega_0 = f * 2 * np.pi
     h = 1e-6 * omega_0
 
@@ -237,11 +235,14 @@ def compute_transient(parameters, mu=1.0):
     phi_dc = u_dc / u_max
 
     y_final = simulate_transient(50_000_000, h, c1, c2, c3, c4, phi_dc, a)
-    return (y_final, h, c1, c2, c3, c4, c5, phi_dc, a)
+    return (y_final, h, c1, c2, c3, c4, c5, phi_dc)
 
 
-def process_one_file(fname, precomp_list):
+def process_one_file(fname, precomp_list, a):
     data, sr = sf.read(fname)
+
+    # Scale the data to [-1, 1] range
+    data = 2 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 1
     
     new_len = 1_000_000
     frac = new_len / sr
@@ -254,7 +255,7 @@ def process_one_file(fname, precomp_list):
     n_freq = len(precomp_list)
     file_features = np.empty((n_freq * 60,), dtype=np.float32)
 
-    for i, (y_final, h, c1, c2, c3, c4, c5, phi_dc, a) in enumerate(precomp_list):
+    for i, (y_final, h, c1, c2, c3, c4, c5, phi_dc) in enumerate(precomp_list):
         u_ac_buf = simulate_with_force(y_final, new_len, h, c1, c2, c3, c4, c5, phi_dc, a, signal)
         feats = extract_features(u_ac_buf)
         file_features[i*60:(i+1)*60] = feats
@@ -297,9 +298,14 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
     return results
 
 
-
 if __name__ == '__main__':
-
+    a = 0.5
+    # a = 0.9
+    u_dc = 0.3
+    # u_dc = 1.0
+    f_values = np.linspace(1_000, 50_000, 100, dtype=np.int64)
+    # mu_values = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0])
+    mu_values = np.array([2, 5, 7, 20, 30, 40, 50, 70])
     lambda_values = np.array([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6])
 
     train_files_path = '/scratch/almo2783/scratch/rayson/design1/barcelona/train-filenames-barcelona-rayson.csv'
@@ -312,33 +318,21 @@ if __name__ == '__main__':
     labels_train = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_train.npy")
     labels_val   = np.load("/scratch/almo2783/scratch/dim-less/barcelona/label_matrix_val.npy")
 
-    u_dc = 0.5
-    ratio = 0.3
-    mu_values = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0])
-    f_values = np.linspace(1_000, 50_000, 100, dtype=int)
-    a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}.npy")
     train_accs = []
     val_accs = []
     lambdas = []
 
     for mu in mu_values:
-        print(f"\nProcessing for mu={mu} ...")
-        a_values = a_crits * ratio
-
-        # create a tuple of parameters as (f, a, u_dc)
-        parameter_tuples = [
-            (f_values[i], a_values[i], u_dc)
-            for i in range(len(f_values))
-        ]
+        print(f"Processing for mu={mu} ...")
 
         # Parallel precomputation of transients
         precomp_list = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-            delayed(compute_transient)(params, mu) for params in parameter_tuples
+            delayed(compute_transient)(f, a, mu, u_dc) for f in f_values
         )
 
         # Parallel over files (each file handles all frequencies)
         results = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-            delayed(process_one_file)(fname, precomp_list) for fname in filenames
+            delayed(process_one_file)(fname, precomp_list, a) for fname in filenames
         )
 
         state_matrix = np.vstack(results)
@@ -376,7 +370,9 @@ if __name__ == '__main__':
 
         best_val    = val_acc[idx_best]
         best_train  = train_acc[idx_best]
+        # best_lambda = lambdas[idx_best]
         best_lambda = lambda_grid[idx_best]
+
 
         lambdas.append(best_lambda)
         train_accs.append(best_train)
@@ -387,8 +383,7 @@ if __name__ == '__main__':
         print(f"best Lambda: {best_lambda}")
         print(f"Training acc: {best_train:2f} %")
         print(f"Validation acc: {best_val:.2f} %")
-
     
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas-u_dc-{u_dc:.2f}-ratio-{ratio:.1f}-a-crits.npy", np.array(lambdas))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc-u_dc-{u_dc:.2f}-ratio-{ratio:.1f}-a-crits.npy", np.array(train_accs))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc-u_dc-{u_dc:.2f}-ratio-{ratio:.1f}-a-crits.npy", np.array(val_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled-2.npy", np.array(lambdas))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled-2.npy", np.array(train_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled-2.npy", np.array(val_accs))

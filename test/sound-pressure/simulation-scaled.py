@@ -2,7 +2,7 @@ import numpy as np
 import soundfile as sf
 from scipy.stats import skew, kurtosis
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import StandardScaler, maxabs_scale
+from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
 from numba import njit
 
@@ -242,7 +242,7 @@ def process_one_file(fname, precomp_list, a):
     data, sr = sf.read(fname)
 
     # Scale the data to [-1, 1] range
-    data = maxabs_scale(data)
+    data = 2 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 1
     
     new_len = 1_000_000
     frac = new_len / sr
@@ -299,8 +299,10 @@ def ridge_regression_fast(X_train, Y_train, X_eval, Y_eval, lam):
 
 
 if __name__ == '__main__':
-    a = 0.5
-    u_dc = 0.3
+    # a = 0.5
+    a = 0.9
+    # u_dc = 0.3
+    u_dc = 1.0
     f_values = np.linspace(1_000, 50_000, 100, dtype=np.int64)
     mu_values = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1_000.0, 10_000.0])
     lambda_values = np.array([1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 1e2, 1e3, 1e4, 1e5, 1e6])
@@ -381,6 +383,6 @@ if __name__ == '__main__':
         print(f"Training acc: {best_train:2f} %")
         print(f"Validation acc: {best_val:.2f} %")
     
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas_mu-{mu:.1e}-scaled-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(lambdas))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc_mu-{mu:.1e}-scaled-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(train_accs))
-    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc_mu-{mu:.1e}-scaled-a-{a:.2f}-u_dc-{u_dc:.2f}.npy", np.array(val_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/lambdas/best_lambdas-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled.npy", np.array(lambdas))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/training/training_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled.npy", np.array(train_accs))
+    np.save(f"/scratch/almo2783/scratch/test/sound-pressure/validation/validation_acc-a-{a:.2f}-u_dc-{u_dc:.2f}-scaled.npy", np.array(val_accs))

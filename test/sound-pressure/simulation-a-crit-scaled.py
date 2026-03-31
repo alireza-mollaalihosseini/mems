@@ -243,8 +243,11 @@ def compute_transient(parameters, mu=1.0):
 def process_one_file(fname, precomp_list):
     data, sr = sf.read(fname)
 
+    # # Scale the data to [-1, 1] range
+    # data = maxabs_scale(data)
+
     # Scale the data to [-1, 1] range
-    data = maxabs_scale(data)
+    data = 2 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 1
     
     new_len = 1_000_000
     frac = new_len / sr
@@ -336,7 +339,7 @@ if __name__ == '__main__':
 
         # Parallel precomputation of transients
         precomp_list = Parallel(n_jobs=64, backend="multiprocessing", verbose=1)(
-            delayed(compute_transient)(params) for params in parameter_tuples
+            delayed(compute_transient)(params, mu) for params in parameter_tuples
         )
 
         # Parallel over files (each file handles all frequencies)
