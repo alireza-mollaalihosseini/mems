@@ -356,9 +356,6 @@ def compute_transient_pair(params, mu=1.0):
 def process_one_file(fname, precomp_list):
     data, sr = sf.read(fname)
 
-    # Scale the data to [-1, 1] range
-    data = 2 * (data - np.min(data)) / (np.max(data) - np.min(data)) - 1
-
     new_len = 1_000_000
     frac = new_len / sr
     idxs_len = int(len(data) * frac)
@@ -443,7 +440,8 @@ if __name__ == '__main__':
 
     u_dc = 0.5
     ratio = 0.3
-    mu = 1.0
+    # mu = 1.0
+    mu = 100.0
     f_values = np.linspace(1_000, 50_000, 100, dtype=int)
     a_crits = np.load(f"/scratch/almo2783/scratch/test/a-crit/a-crits/a-crit-u-dc-{u_dc:.1f}-more.npy")
     a_values = a_crits * ratio
@@ -482,7 +480,7 @@ if __name__ == '__main__':
     outputs = Parallel(
         n_jobs=64,
         verbose=1,
-        backend="loky"
+        backend="multiprocessing"
     )(
         delayed(ridge_regression_fast)(
             X_train_std, labels_train,
